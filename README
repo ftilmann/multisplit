@@ -1,0 +1,65 @@
+Multisplit package for shear wave splitting studies
+
+
+Author:  Frederik Tilmann
+(for bug reports and patches    tilmann---gfz-potsdam.de)
+
+License: GPL3.0
+
+Requirements: SAC libraries (tested under Version 101.5c) - 
+			  GMT (tested under 4.5)
+
+Installation:
+
+Unpack 
+   tar -z -xvf multisplit.tgz
+
+Compile
+The gsl packages are needed. On Ubuntu  (12.04 LTS) and probably other versions these can be made available by executing
+	sudo apt-get install libgsl0-dev libgsl0ldbl libgsl0-dev libgsl0ldbl 
+
+Adapt Makefile for location of binary files and location of SAC libraries and include files
+	make
+
+Description:
+	Use option '-h' to get usage information
+
+	MULTISPLIT 		Measure single layer splitting parameters from two (or four) horizontal component waveforms in SAC format
+					Measure (note that not all functionality listed in the usage information is implemented)
+	SPLIT_COR		Apply inverse or forward single-layer splitting operator to two horizontal components 
+
+Example:
+Go to sub-directory example
+SKS splitting (Null-splitting), Minimum Transverse Energy Method:
+	multisplit -v -mintransverse -single 1 0.05 2.5 -data 199807191558.s06.2.sac 199807191558.s06.3.sac -taper 1.0 -winp a f
+SKS splitting (Null-splitting), Minimum Eigenvalue Method:
+	multisplit -v -minevalue -single 1 0.05 2.5 -data 199807191558.s06.2.sac 199807191558.s06.3.sac -taper 1.0 -winp a f
+SKS splitting 
+	multisplit -v -mintransverse -single 1 0.05 2.5 -data 199807191558.s38.2.sac 199807191558.s38.3.sac -taper 1.0 -winp a f -grd -gmt
+	multisplit -v -minevalue -single 1 0.05 2.5 -data 199807191558.s38.2.sac 199807191558.s38.3.sac -taper 1.0 -winp a f -grd -gmt
+
+Reference station method, using s06 as reference station:
+	multisplit -v -correl 4.0 199807191558.s06.2.sac 199807191558.s06.3.sac -single 5 0.1 2.0 -data 199807191558.s38.2.sac 199807191558.s38.3.sac -winp a f -gmt
+
+Splitting correction:
+	split_cor -data 199807191558.s38.2.sac  199807191558.s38.3.sac -split 94 1.75 -app _splitcor
+
+
+References:
+Reference station method (Option -correl):
+Eken T. and Tilmann, F.  The use of direct shear waves in quantifying seismic anisotropy: exploiting regional arrays, submitted to BSSA:
+
+SKS splitting methods:
+Silver, P. G. & Chan, W. W., 1991, Shear wave splitting and subcontinental mantle deformation, J. Geophys. Res., , 96, 16429-16454
+
+Error stacking:
+Wolfe, C. J., and P. Silver (1998). Seismic anisotropy of oceanic mantle:
+Shear wave splitting methodologies and observations, J. Geophys.
+Res. 103, no. B1, 749–771.
+
+
+If you use this code for SKS measurements, please note that the following paper describes an example usage of this code:
+Eken, T.; Tilmann, F.; Mechie, J.; Zhao, W.; Kind, R.; Su, H.; Xue, G. & Karplus, M., 2013, Seismic Anisotropy from SKS splitting beneath Northeastern Tibet, Bul. Seism. Soc. Am., 103, 3362-3371 , doi:10.1785/0120130054
+
+
+
