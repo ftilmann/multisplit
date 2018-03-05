@@ -119,7 +119,8 @@ typedef struct {
 
 /* make_grd identifieres */
 #define MAKE_GRD 1
-#define MAKE_GMT 1
+#define MAKE_GMT 2
+#define MAKE_GMT5 2|4   /* note that MAKE_GMT5 implies MAKE_GMT (second bit set) */
 
 /* Function protoptypes */
 void abort_msg(char *);

@@ -27,6 +27,7 @@ Description:
 	MULTISPLIT 		Measure single layer splitting parameters from two (or four) horizontal component waveforms in SAC format
 					Measure (note that not all functionality listed in the usage information is implemented)
 	SPLIT_COR		Apply inverse or forward single-layer splitting operator to two horizontal components 
+	ERROR_STACK     stack error surfaces (method of Wolfe and Silver (1998)
 
 Example:
 Go to sub-directory example

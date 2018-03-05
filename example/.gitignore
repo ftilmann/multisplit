@@ -10,4 +10,6 @@
 .gmtcommands*
 .gmtdefaults*
 .gmt
-
+gmt.history
+gmt.conf
+.gmt_bb_info

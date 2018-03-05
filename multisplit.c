@@ -627,7 +627,7 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
       }
     }
   }
-  if (par->make_grd==MAKE_GMT) {
+  if ( par->make_grd | MAKE_GMT  ) {
     /* Output time series */
     long itime;
 
@@ -751,6 +751,11 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
     fprintf(output,"set bestfast=%f\n",best_fast);
     fprintf(output,"set besttime=%f\n",best_time);
     fprintf(output,"set baz=%f\n",hdr->baz);
+    if (par->make_grd == MAKE_GMT5) {
+      fprintf(output,"alias grdinfo gmt grdinfo\n");
+      fprintf(output,"alias psxy gmt psxy\n");
+      /* continue here to put gmt5 commands */
+    }
     if(!isnan(pol)) 
       fprintf(output,"set pol=%f\n",pol);
     fprintf(output,"cat > $root.description <<EOF\n");
@@ -1957,6 +1962,9 @@ void parse(int argc, char **argv, ms_params *par) {
     else if(!strcasecmp(argv[iarg],"-gmt") ) {
       par->make_grd=MAKE_GMT;
     }
+    else if(!strcasecmp(argv[iarg],"-gmt5") ) {
+      par->make_grd=MAKE_GMT5;
+    }
     else if(!strcasecmp(argv[iarg],"-dof") ) {
       if ( iarg+1>=argc ) 
 	abort_msg("-dof must be followed by 1 argument (degrees of freedom per sec)");
@@ -2061,7 +2069,8 @@ Optional modifiers\n\
 \n\
 -grd                     Convert 2-parameter error surface binary files to GMT grid files\n\
                                         \n\
--gmt                     Create and execute GMT script for display - write out time series files\n\
+-gmt                     Create and execute GMT script for display - write out time series files (GMT4)\n\
+-gmt5                     Create and execute GMT script for display - write out time series files (GMT5)\n\
 \n\
 -name root               Set root of output file names\n\
                          (Default: derive name from first input file root)\n\
