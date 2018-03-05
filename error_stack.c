@@ -21,7 +21,11 @@
 
 int verbose=0;
 #define VRB(command) { if(verbose) { command  ; fflush(stdout); }}
+
+#if !defined NAN
 #define NAN (strtod("NAN",NULL))
+#endif
+
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MIN(a,b) ((a)<(b)?(a):(b))
 /* PER(per,x) return a value v with range 0..per-1 such that v+n*per=x (n an integer). It only works for integers */
@@ -99,24 +103,24 @@ int main(int argc, char **argv)
     hdr_file=open_for_read(par->fnames[k],".hdr");
     bin_file=open_for_read(par->fnames[k],".bin");
     if ( fscanf(hdr_file,"%s %f %f\n",methodstring,&split_par,&dof[k]) != 3 ) {
-      sprintf("Format error in %s.hdr file line 1",par->fnames[k]); 
+      fprintf(stderr,"Format error in %s.hdr file line 1",par->fnames[k]); 
       abort_msg(abort_str);
     }
     if ( fscanf(hdr_file,"%d\n",&dim) != 1 ) {
-      sprintf("Format error in %s.hdr file line 2",par->fnames[k]); 
+      sprintf(abort_str,"Format error in %s.hdr file line 2",par->fnames[k]); 
       abort_msg(abort_str);
     }
     if (dim>MAXDIM) 
       abort_msg("Maximum number of dimensions exceeded. Increase MAXDIM in source and recompile");
     for (i=0; i<dim;i++) {
       if ( fscanf(hdr_file,"%d",&m[i]) != 1 ) {
-	sprintf("Format error in %s.hdr file line 3",par->fnames[k]); 
+	sprintf(abort_str,"Format error in %s.hdr file line 3",par->fnames[k]); 
 	abort_msg(abort_str);
       }
     }
     for (i=0; i<dim;i++) {
       if (fscanf(hdr_file,"%s %f %f %f\n",label[i],&min[i],&max[i],&step[i]) != 4) {
-	sprintf("Format error in %s.hdr file line %d",par->fnames[k],4+i); 
+	sprintf(abort_str,"Format error in %s.hdr file line %d",par->fnames[k],4+i); 
 	abort_msg(abort_str);
       }
     }
@@ -136,12 +140,12 @@ int main(int argc, char **argv)
       }			   
     } else { /* k!=0: check that definitions consistent with first file */
       if (strcmp(rmethodstring,"Mixed") && strcmp(rmethodstring,methodstring)) {
-	sprintf(warn_str,"Method in % and %s disagree:\n %s vs %s\n This is OK if you wish to combine different methods",par->fnames[0],par->fnames[k],rmethodstring,methodstring);
+	sprintf(warn_str,"Method in %s and %s disagree:\n %s vs %s\n This is OK if you wish to combine different methods",par->fnames[0],par->fnames[k],rmethodstring,methodstring);
 	strcpy(rmethodstring,"Mixed");
 	warn_msg(warn_str);
       }
       if (rdim != dim) {
-	sprintf(abort_str,"Number of dimensions in % and %s disagree:\n %d vs %d",par->fnames[0],par->fnames[k],rdim,dim);
+	sprintf(abort_str,"Number of dimensions in %s and %s disagree:\n %d vs %d",par->fnames[0],par->fnames[k],rdim,dim);
 	abort_msg(abort_str);
       }
       for(i=0;i<dim;i++) {
@@ -156,7 +160,7 @@ int main(int argc, char **argv)
       abort_msg(abort_str);
     }
     /* find minimum index */
-    gsl_matrix_min_index(err_surf,&imin[k][0],&imin[k][1]);
+    gsl_matrix_min_index(err_surf,(size_t *)&imin[k][0],(size_t *)&imin[k][1]);
     valmin[k]=gsl_matrix_get(err_surf,imin[k][0],imin[k][1]);
     printf("%25s %s: %6f  %s: %6f emin: %f dof: %f\n",par->fnames[k],
 	   rlabel[0],min[0]+imin[k][0]*step[0],
@@ -180,7 +184,7 @@ int main(int argc, char **argv)
   }
 
   /* Analysis of error surface */
-  gsl_matrix_min_index(err_stack,&imint[0],&imint[1]);
+  gsl_matrix_min_index(err_stack,(size_t *)&imint[0],(size_t *)&imint[1]);
   emin=gsl_matrix_get(err_stack,imint[0],imint[1]);
 
   best[0]=imint[0]*step[0];
@@ -191,7 +195,7 @@ int main(int argc, char **argv)
 
   for(i=0;i<9;i++) {
     contour[i]=1+split_par*invfisher((double)split_par,(double)tot_dof,conf[i])/tot_dof;
-    VRB(printf("i: %ld confidence %f contour %f tot_dof %f split_par %f\n",i,conf[i],contour[i],tot_dof,split_par));
+    VRB(printf("i: %d confidence %f contour %f tot_dof %f split_par %f\n",i,conf[i],contour[i],tot_dof,split_par));
     if (rmin[1]==0.0 && contour[i]*emin<gsl_matrix_get(err_stack,0,0))
       null=conf[i];
   }

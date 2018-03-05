@@ -174,7 +174,7 @@ int main(int argc, char **argv)
   /* rotate to fast/slow */
   gsl_float_rotate(par->data_hor1,par->data_hor2, par->hdr_hor1->cmpaz - par->fast);
   ishift=(long)rint(par->time/par->hdr_hor1->delta);
-  VRB(printf("Shift %f ishift %d New length %d\n",par->time,ishift,par->data_hor1->size-ishift));
+  VRB(printf("Shift %f ishift %ld New length %ld\n",par->time,ishift,par->data_hor1->size-ishift));
   vue_fast=gsl_vector_float_subvector(par->data_hor1,ishift,par->data_hor1->size-ishift);
   vue_slow=gsl_vector_float_subvector(par->data_hor2,0,par->data_hor2->size-ishift);
   par->hdr_hor1->npts -= ishift;

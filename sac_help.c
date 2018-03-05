@@ -1,11 +1,14 @@
 #include <gsl/gsl_vector_float.h>
 #include <math.h>
+#include <string.h> 
+
 #include "sac_help.h"
 
 #define F_EQ(a,b) (2.*fabs((a)-(b))/((a)+(b)+10*TOLERANCE)<TOLERANCE )
 
 #define TOLERANCE 1e-5
 #define VRBD(command) { if(1) { command  ; fflush(stdout); }}
+void warn_msg(char *msg);
 
 static void sac_help_abort_msg(char *msg) {
   fprintf(stderr,"%s\n ABORT \n",msg);
