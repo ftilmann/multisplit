@@ -11,21 +11,21 @@ LIBS =
 GSLLIBS = -lgsl -lgslcblas -lm
 
 # Executables will be placed here (NB: no separate installation, final link directly generates executable here)
-#BIN=$(HOME)/bin
-BIN = .
+BIN=$(HOME)/bin/$(ARCH)
+#BIN = .
 
 EXEC = multisplit split_cor error_stack
 
-.PHONY: $(EXEC)
+.PHONY:  install clean
 default: $(EXEC)
 
-$(BIN)/multisplit: multisplit.o  rmeantaper.o gsl_seis.o invfisher.o betai.o sac_help.o
+multisplit: multisplit.o  rmeantaper.o gsl_seis.o invfisher.o betai.o sac_help.o
 	$(CC) $(CFLAGS) -o $(BIN)/multisplit $^ $(SACLIB) $(GSLLIBS) $(LIBS)
 
-$(BIN)/split_cor: split_cor.o gsl_seis.o sac_help.o
+split_cor: split_cor.o gsl_seis.o sac_help.o
 	$(CC) $(CFLAGS) -o $@ $^ $(SACLIB) $(GSLLIBS) $(LIBS)
 
-$(BIN)/error_stack: error_stack.o invfisher.o betai.o 
+error_stack: error_stack.o invfisher.o betai.o 
 	$(CC) $(CFLAGS) -o $@ $^ $(SACLIB) $(GSLLIBS) $(LIBS)
 # betacf.o gammln.o nrutil.o 
 
@@ -34,5 +34,7 @@ gsl_seis.o: gsl_seis.h
 multisplit.o: multisplit.h
 
 clean:
-	rm *.o
-
+	rm *.o $(EXEC)
+	
+install: $(EXEC)
+	install $(EXEC) $(BIN)

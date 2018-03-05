@@ -1,0 +1,13 @@
+*.ps
+*.hdr
+*.grd
+*.xy
+*.description
+*.bin
+*.cont
+*.gmt
+*.txt
+.gmtcommands*
+.gmtdefaults*
+.gmt
+

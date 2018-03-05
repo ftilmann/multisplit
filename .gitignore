@@ -19,3 +19,8 @@
 *.exe
 *.out
 *.app
+multisplit
+error_stack
+split_cor
+
+
