@@ -2022,7 +2022,7 @@ Method: Choose one of\n\
 \n\
 -conv                    Convolution method - Menke and Levin, 2003\n\
 \n\
--cx or -correl maxshift refh1 refh2       Reference station method (see Eken and Tilmann, submitted to BSSA\n\
+-cx or -correl maxshift refh1 refh2       Reference station method (see Eken and Tilmann BSSA, 2014, doi:10.1785/0120140020 )\n\
                          Minimise difference to reference station\n\
                          maxshift: maximum amount of travel time shift between stations\n\
                          refh1, refh2: sac file containing two horizontal components with\n\
@@ -2066,7 +2066,7 @@ Optional modifiers\n\
 -name root               Set root of output file names\n\
                          (Default: derive name from first input file root)\n\
 \n\
--dof f                   Set number of degrees of freedom per second\n\
+-dof f                   Set number of degrees of freedom per second (Default: 1s)\n\
 \n\
 -v                       Verbose output\n\
 \n\
