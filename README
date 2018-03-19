@@ -32,9 +32,9 @@ Description:
 Example:
 Go to sub-directory example
 SKS splitting (Null-splitting), Minimum Transverse Energy Method:
-	multisplit -v -mintransverse -single 1 0.05 2.5 -data 199807191558.s06.2.sac 199807191558.s06.3.sac -taper 1.0 -winp a f
+	multisplit -v -mintransverse -single 1 0.05 2.5 -data 199807191558.s06.2.sac 199807191558.s06.3.sac -taper 1.0 -winp a f -grd -gmt
 SKS splitting (Null-splitting), Minimum Eigenvalue Method:
-	multisplit -v -minevalue -single 1 0.05 2.5 -data 199807191558.s06.2.sac 199807191558.s06.3.sac -taper 1.0 -winp a f
+	multisplit -v -minevalue -single 1 0.05 2.5 -data 199807191558.s06.2.sac 199807191558.s06.3.sac -taper 1.0 -winp a f -grd -gmt
 SKS splitting 
 	multisplit -v -mintransverse -single 1 0.05 2.5 -data 199807191558.s38.2.sac 199807191558.s38.3.sac -taper 1.0 -winp a f -grd -gmt
 	multisplit -v -minevalue -single 1 0.05 2.5 -data 199807191558.s38.2.sac 199807191558.s38.3.sac -taper 1.0 -winp a f -grd -gmt

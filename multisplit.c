@@ -773,6 +773,15 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
     else 
       fprintf(output,"\n");
     fprintf(output,"EOF\n\n");
+        if (par->make_grd == MAKE_GMT5) {
+            fprintf(output,"gmtset PS_PAGE_ORIENTATION portrait PROJ_LENGTH_UNIT cm  FONT_LABEL 12 FONT_ANNOT 10 PS_MEDIA a4 FORMAT_FLOAT_OUT %%lg\n");
+            fprintf(output,"set m=-V\n");
+            fprintf(output,"set k=-Gd1000\n");
+        }else { 
+            fprintf(output,"gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n");
+            fprintf(output,"set m=-M\n");
+            fprintf(output,"set k=-G1000\n");
+        }
     fprintf(output,"\
 ### Everything below this line is independent of the particular event used\n\
 set grdrange=`grdinfo -C ${root}_err.grd | awk '{print $2 \"/\" $3 \"/\" $4 \"/\" $5 }'`\n\
@@ -783,22 +792,22 @@ set timerange=( `awk 'NR==1 { print $1 } { lastx=$1 } END { print lastx }' ${roo
 set psfile=${root}.ps\n\
 \n\
 gmtdefaults -D >.gmtdefaults\n\
-gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n\
+\n\
 # 3cm Descriptive text\n\
 pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
 \n\
 # 8 cm Error surface\n\
-grdcontour -X2 -Y20.5 ${root}_err.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n\
+grdcontour -X2 -Y20.5 ${root}_err.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 $k -Wa1.5p -Wc0.5p >>$psfile\n\
 psxy -R -JX -Sx0.3 -W2p  -O -K  >>$psfile <<EOF\n\
 $besttime $bestfast\n\
 EOF\n\
-psxy -R -JX -W1p/200/200/200to -O -K  >>$psfile <<EOF\n\
+psxy -R -JX -W1p,200/200/200 -O -K  >>$psfile <<EOF\n\
 0 $baz\n\
 10 $baz\n\
 EOF\n\
 if ( $?pol ) then \n\
   set polp=`echo $pol | awk '{ if ($1<90) {print $1+90;} else print $1-90 }'`\n\
-  psxy -R -JX -M -W1p/200/200/200 -O -K  >>$psfile <<EOF\n\
+  psxy -R -JX $m -W1p,200/200/200 -O -K  >>$psfile <<EOF\n\
 >\n\
 0 $pol\n\
 10 $pol\n\
@@ -809,7 +818,7 @@ EOF\n\
 endif\n\
 # 4 cm Rad Transverse\n\
 psxy ${root}_rad.xy -Y-6.5 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wseN -W1p -O -K >>$psfile\n\
-psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Radial-Transverse\n\
 EOF\n\
@@ -818,7 +827,7 @@ paste ${root}_rad.xy ${root}_tra.xy | awk '{ print $4,$2 }' | psxy -X13 -R-${max
 \n\
 # 4 cm Fast Slow\n\
 psxy ${root}_fast.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_slow.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_slow.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Fast-Slow\n\
 EOF\n\
@@ -827,7 +836,7 @@ paste ${root}_fast.xy ${root}_slow.xy | awk '{ print $4,$2 }' | psxy -X13  -R-${
 \n\
 # 4 cm Fast Slow, corrected\n\
 psxy ${root}_fastcor.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_slowcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_slowcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Fast-Slow, corrected\n\
 EOF\n\
@@ -837,7 +846,7 @@ paste ${root}_fastcor.xy ${root}_slowcor.xy | awk '{ print $4,$2 }' | psxy -X13 
 \n\
 # 4 cm Rad Transverse, corrected \n\
 psxy ${root}_radcor.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1:\"Time (s)\":/${maxamp}::wSen -W1p -O -K >>$psfile\n\
-psxy ${root}_tracor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_tracor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Radial-Transverse, corrected\n\
 EOF\n\
@@ -908,6 +917,15 @@ psxy < /dev/null -Jx1 -R -O >>$psfile\n\
 	fprintf(output,"\n");
       fprintf(output,"EOF\n\n"); 
 
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"gmtset PS_PAGE_ORIENTATION portrait PROJ_LENGTH_UNIT cm  FONT_LABEL 12 FONT_ANNOT 10 PS_MEDIA a4 FORMAT_FLOAT_OUT %%lg\n");
+        fprintf(output,"set m=-V\n");
+        fprintf(output,"set k=-Gd1000\n");
+    }else { 
+        fprintf(output,"gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n");
+        fprintf(output,"set m=-M\n");
+        fprintf(output,"set k=-G1000\n");
+    }
       fprintf(output,"\
 ### Everything below this line is independent of the particular event used\n\
 \n\
@@ -919,23 +937,22 @@ set timerange=( `awk 'NR==1 { print $1 } { lastx=$1 } END { print lastx }' ${roo
 set psfile=${root}-aux.ps\n\
 \n\
 gmtdefaults -D >.gmtdefaults\n\
-gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n\
 # 3cm Descriptive text\n\
 pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
 \n\
 # Map delay\n\
-grdcontour -X2 -Y20.5 ${root}_dly.grd -C0.1 -A0.5f7 -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -G4c -Wa1.5p -Wc0.5p >>$psfile\n\
+grdcontour -X2 -Y20.5 ${root}_dly.grd -C0.1 -A0.5f7 -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K $k -Wa1.5p -Wc0.5p >>$psfile\n\
 psxy -R -JX -Sx0.3 -W2p  -O -K  >>$psfile <<EOF\n\
 $besttime $bestfast\n\
 EOF\n\
 # overlay 95%% confidence contour in gray\n\
 awk '$2 == \"A\" { print  }' ${root}.cont > ${root}_tmp.acont\n\
-grdcontour ${root}_err.grd -C${root}_tmp.acont -M -D${root}_tmp.95cont -JX  -R > /dev/null\n\
-psxy ${root}_tmp.95cont -M  -R -JX -W1p/200/200/200ta  -O -K  >>$psfile \n\
+grdcontour ${root}_err.grd -C${root}_tmp.acont $m -D${root}_tmp.95cont -JX  -R > /dev/null\n\
+psxy ${root}_tmp.95cont $m  -R -JX -W1p,200/200/200  -O -K  >>$psfile \n\
 \n\
 # 4 cm RefRad refTransverse\n\
 psxy ${root}_refrad.xy -Y-6.5 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wseN -W1p -O -K >>$psfile\n\
-psxy ${root}_reftra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_reftra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Reference Radial-Transverse\n\
 EOF\n\
@@ -943,7 +960,7 @@ paste ${root}_refrad.xy ${root}_reftra.xy | awk '{ print $4,$2 }' | psxy -X13 -R
 \n\
 # 4 cm Data radial-transverse\n\
 psxy ${root}_rad.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Observed Radial-Transverse\n\
 EOF\n\
@@ -964,7 +981,7 @@ paste ${root}_tmp_tracc.xy ${root}_tmp_reftra.xy | awk '{ print $1,$2-$4 }' > ${
 \n\
 # 4 cm  radial transverse, corrected (including amplitude and delay correction)\n\
 psxy ${root}_tmp_radcorcor.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_tmp_tracorcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_tmp_tracorcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Corrected Radial-Transverse\n\
 EOF\n\
@@ -973,7 +990,7 @@ paste ${root}_tmp_radcorcor.xy ${root}_tmp_tracorcor.xy  | awk '{ print $4,$2 }'
 \n\
 # 4 cm Residual (Observed - reference)\n\
 psxy ${root}_tmp_resrad.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1:\"Time (s)\":/${maxamp}::wSen -W1p -O -K >>$psfile\n\
-psxy ${root}_tmp_restra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p0/0/0to -O -K >>$psfile\n\
+psxy ${root}_tmp_restra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
 pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Residual Radial-Transverse\n\
 EOF\n\
@@ -1019,6 +1036,15 @@ psxy < /dev/null -Jx1 -R -O >>$psfile\n\
       else 
 	fprintf(output,"\n");
       fprintf(output,"EOF\n\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"gmtset PS_PAGE_ORIENTATION portrait PROJ_LENGTH_UNIT cm  FONT_LABEL 12 FONT_ANNOT 10 PS_MEDIA a4 FORMAT_FLOAT_OUT %%lg MAP_LABEL_OFFSET 0.05c MAP_ANNOT_OFFSET_PRIMARY 0.15c\n");
+        fprintf(output,"set m=-V\n");
+        fprintf(output,"set k=-Gd1000\n");
+    }else { 
+        fprintf(output,"gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg LABEL_OFFSET 0.05c ANNOT_OFFSET_PRIMARY 0.15c\n");
+        fprintf(output,"set m=-M\n");
+        fprintf(output,"set k=-G1000\n");
+    }
       fprintf(output,"\
 ### Everything below this line is independent of the particular event used\n\
 set grdrange=`grdinfo -C ${root}_err.grd | awk '{print $2 \"/\" $3 \"/\" $4 \"/\" $5 }'`\n\
@@ -1029,22 +1055,21 @@ set timerange=( `awk 'NR==1 { print $1 } { lastx=$1 } END { print lastx }' ${roo
 set psfile=${root}-colour.ps\n\
 \n\
 gmtdefaults -D >.gmtdefaults4\n\
-gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg LABEL_OFFSET 0.05c ANNOT_OFFSET_PRIMARY 0.15c\n\
 # 3cm Descriptive text\n\
 pstext -M -X0 -Y0 -R0/20/0/30 -Jx1 -K > $psfile <${root}.description\n\
 \n\
 # 8 cm Error surface\n\
-grdcontour -X2 -Y22 ${root}_err.grd -C${root}.cont -R$grdrange -JX9.1/5.8 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n\
+grdcontour -X2 -Y22 ${root}_err.grd -C${root}.cont -R$grdrange -JX9.1/5.8 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 $k -Wa1.5p -Wc0.5p >>$psfile\n\
 psxy -R -JX -S+0.3 -W3p,150/150/150  -O -K  >>$psfile <<EOF\n\
 $besttime $bestfast\n\
 EOF\n\
-psxy -R -JX -W1p/200/200/200to -O -K  >>$psfile <<EOF\n\
+psxy -R -JX -W1p,200/200/200 -O -K  >>$psfile <<EOF\n\
 0 $baz\n\
 10 $baz\n\
 EOF\n\
 if ( $?pol ) then \n\
   set polp=`echo $pol | awk '{ if ($1<90) {print $1+90;} else print $1-90 }'`\n\
-  psxy -R -JX -M -W1p/200/200/200 -O -K  >>$psfile <<EOF\n\
+  psxy -R -JX $m -W1p,200/200/200 -O -K  >>$psfile <<EOF\n\
 >\n\
 0 $pol\n\
 10 $pol\n\
