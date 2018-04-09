@@ -759,7 +759,11 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
     if(!isnan(pol)) 
       fprintf(output,"set pol=%f\n",pol);
     fprintf(output,"cat > $root.description <<EOF\n");
-    fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
+        if (par->make_grd == MAKE_GMT5) {
+          fprintf(output,"> 10 29  0.564 20  c\n");
+        }else { 
+          fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
+        }
     fprintf(output,"%s %8.8s %-8s BAZ %3.0f Dist %3.0f Dp %3.0f\n\n",evname,hdr->kstnm,phase,hdr->baz, hdr->gcarc, hdr->evdp);
     fprintf(output,"%s: Res %f",methodstring,emin);
     if (descrip1 && m_aux1)
@@ -793,8 +797,13 @@ set psfile=${root}.ps\n\
 \n\
 gmtdefaults -D >.gmtdefaults\n\
 \n\
-# 3cm Descriptive text\n\
-pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
+# 3cm Descriptive text\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext -M -X0 -Y0 -R0/20/0/29 -Jx1  -F+f12p,Times-Roman+jCT  -K > $psfile <${root}.description\n");
+    }else { 
+        fprintf(output,"pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n");
+    }
+fprintf(output,"\
 \n\
 # 8 cm Error surface\n\
 grdcontour -X2 -Y20.5 ${root}_err.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 $k -Wa1.5p -Wc0.5p >>$psfile\n\
@@ -818,38 +827,70 @@ EOF\n\
 endif\n\
 # 4 cm Rad Transverse\n\
 psxy ${root}_rad.xy -Y-6.5 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wseN -W1p -O -K >>$psfile\n\
-psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_rad.xy ${root}_tra.xy | awk '{ print $4,$2 }' | psxy -X13 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_rt_pmp.xy -X13 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
 # 4 cm Fast Slow\n\
 psxy ${root}_fast.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_slow.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_slow.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95 Fast-Slow\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Fast-Slow\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_fast.xy ${root}_slow.xy | awk '{ print $4,$2 }' | psxy -X13  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_fs_pmp.xy -X13  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 \n\
 # 4 cm Fast Slow, corrected\n\
 psxy ${root}_fastcor.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_slowcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_slowcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Fast-Slow, corrected\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Fast-Slow, corrected\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_fastcor.xy ${root}_slowcor.xy | awk '{ print $4,$2 }' | psxy -X13  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_fscor_pmp.xy -X13  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 \n\
 \n\
 # 4 cm Rad Transverse, corrected \n\
 psxy ${root}_radcor.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1:\"Time (s)\":/${maxamp}::wSen -W1p -O -K >>$psfile\n\
-psxy ${root}_tracor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tracor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95 Radial-Transverse, corrected\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Radial-Transverse, corrected\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_radcor.xy ${root}_tracor.xy | awk '{ print $4,$2 }' | psxy -X13 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_rtcor_pmp.xy -X13 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
@@ -902,7 +943,11 @@ psxy < /dev/null -Jx1 -R -O >>$psfile\n\
       fprintf(output,"set alpha=%f\n",alpha);
       fprintf(output,"set baz=%f\n",hdr->baz);
       fprintf(output,"cat > $root.description <<EOF\n");
-      fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
+        if (par->make_grd == MAKE_GMT5) {
+          fprintf(output,"> 10 29  0.564 20  c\n");
+        }else { 
+          fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
+        } 
       fprintf(output,"%s %8.8s %-8s BAZ %3.0f Dist %3.0f Dp %3.0f\n\n",evname,hdr->kstnm,phase,hdr->baz, hdr->gcarc, hdr->evdp);
       fprintf(output,"%s: Res %f",methodstring,emin);
       if (descrip1 && m_aux1)
@@ -937,8 +982,13 @@ set timerange=( `awk 'NR==1 { print $1 } { lastx=$1 } END { print lastx }' ${roo
 set psfile=${root}-aux.ps\n\
 \n\
 gmtdefaults -D >.gmtdefaults\n\
-# 3cm Descriptive text\n\
-pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
+# 3cm Descriptive text\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext -M -X0 -Y0 -R0/20/0/29 -Jx1  -F+f12p,Times-Roman+jCT  -K > $psfile <${root}.description\n");
+    }else { 
+        fprintf(output,"pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n");
+    }
+fprintf(output,"\
 \n\
 # Map delay\n\
 grdcontour -X2 -Y20.5 ${root}_dly.grd -C0.1 -A0.5f7 -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K $k -Wa1.5p -Wc0.5p >>$psfile\n\
@@ -952,18 +1002,34 @@ psxy ${root}_tmp.95cont $m  -R -JX -W1p,200/200/200  -O -K  >>$psfile \n\
 \n\
 # 4 cm RefRad refTransverse\n\
 psxy ${root}_refrad.xy -Y-6.5 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wseN -W1p -O -K >>$psfile\n\
-psxy ${root}_reftra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_reftra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Reference Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Reference Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_refrad.xy ${root}_reftra.xy | awk '{ print $4,$2 }' | psxy -X13 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
 # 4 cm Data radial-transverse\n\
 psxy ${root}_rad.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Observed Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Observed Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_rad.xy ${root}_tra.xy | awk '{ print $4,$2 }' | psxy -X13  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
 # make amplitude and delay corrected traces\n\
@@ -981,19 +1047,35 @@ paste ${root}_tmp_tracc.xy ${root}_tmp_reftra.xy | awk '{ print $1,$2-$4 }' > ${
 \n\
 # 4 cm  radial transverse, corrected (including amplitude and delay correction)\n\
 psxy ${root}_tmp_radcorcor.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_tmp_tracorcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tmp_tracorcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Corrected Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Corrected Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_tmp_radcorcor.xy ${root}_tmp_tracorcor.xy  | awk '{ print $4,$2 }' | psxy -X13  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
 \n\
 # 4 cm Residual (Observed - reference)\n\
 psxy ${root}_tmp_resrad.xy -X-13 -Y-4 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1:\"Time (s)\":/${maxamp}::wSen -W1p -O -K >>$psfile\n\
-psxy ${root}_tmp_restra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tmp_restra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0 -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT  -O -K >>$psfile\n\
+0.05 0.95 Residual Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Residual Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_tmp_resrad.xy ${root}_tmp_restra.xy | awk '{ print $4,$2 }' | psxy -X13 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_rtcor_pmp.xy -X13 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX4/4 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
@@ -1022,7 +1104,11 @@ psxy < /dev/null -Jx1 -R -O >>$psfile\n\
       fprintf(output,"set alpha=%f\n",alpha);
       fprintf(output,"set baz=%f\n",hdr->baz);
       fprintf(output,"cat > $root.description <<EOF\n");
-      fprintf(output,"> 5.7 29.5 12 0 0 CT 0.564 20  c\n");
+        if (par->make_grd == MAKE_GMT5) {
+          fprintf(output,"> 5.7 29.5 0.564 20  c\n");
+        }else { 
+        fprintf(output,"> 5.7 29.5 12 0 0 CT 0.564 20  c\n");
+        }
       fprintf(output,"%s %8.8s %-8s BAZ %3.0f\\232 Dist %3.0f\\232 Dep %3.0f\n",evname,hdr->kstnm,phase,hdr->baz, hdr->gcarc, hdr->evdp);
       /*     fprintf(output,"%s: Res %f",methodstring,emin); */
       fprintf(output,"\nFast %3.0f \\261 %3.0f SplittingDelay %4.2f \\261 %4.2f\n\n",
@@ -1055,8 +1141,13 @@ set timerange=( `awk 'NR==1 { print $1 } { lastx=$1 } END { print lastx }' ${roo
 set psfile=${root}-colour.ps\n\
 \n\
 gmtdefaults -D >.gmtdefaults4\n\
-# 3cm Descriptive text\n\
-pstext -M -X0 -Y0 -R0/20/0/30 -Jx1 -K > $psfile <${root}.description\n\
+# 3cm Descriptive text\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext -M -X0 -Y0 -R0/20/0/30 -Jx1  -F+f12p,Times-Roman+jCT  -K > $psfile <${root}.description\n");
+    }else { 
+        fprintf(output,"pstext -M -X0 -Y0 -R0/20/0/30 -Jx1 -K > $psfile <${root}.description\n");
+    }
+fprintf(output,"\
 \n\
 # 8 cm Error surface\n\
 grdcontour -X2 -Y22 ${root}_err.grd -C${root}.cont -R$grdrange -JX9.1/5.8 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 $k -Wa1.5p -Wc0.5p >>$psfile\n\
@@ -1080,45 +1171,85 @@ EOF\n\
 endif\n\
 # 4 cm RefRad refTransverse\n\
 psxy ${root}_refrad.xy -Y-5.5 -X-1 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX7.1/3 -Ba5f1/${maxamp}::wseN -W1p -O -K >>$psfile\n\
-psxy ${root}_reftra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_reftra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1  -F+f12p,Times-Roman+jLT  -O -K >>$psfile\n\
+0.05 0.95  Reference Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Reference Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_refrad.xy ${root}_reftra.xy | awk '{ print $4,$2 }' | psxy -X7.1 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
 # 4 cm Data radial-transverse\n\
 psxy ${root}_rad.xy -X-7.1 -Y-3 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX7.1/3 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1  -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Observed Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Observed Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_rad.xy ${root}_tra.xy | awk '{ print $4,$2 }' | psxy -X7.1  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
 # 4 cm Fast Slow\n\
 psxy ${root}_fast.xy -X-7.1 -Y-3 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX7.1/3 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_slow.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_slow.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1  -F+f12p,Times-Roman+jLT  -O -K >>$psfile\n\
+0.05 0.95  Observed Fast-Slow\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Observed Fast-Slow\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_fast.xy ${root}_slow.xy | awk '{ print $4,$2 }' | psxy -X7.1  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_fs_pmp.xy -X7.1  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 \n\
 # 4 cm Fast Slow, corrected\n\
 psxy ${root}_fastcor.xy -X-7.1 -Y-3 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX7.1/3 -Ba5f1/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_slowcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_slowcor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT  -O -K >>$psfile\n\
+0.05 0.95 Corrected Fast-Slow\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Corrected Fast-Slow\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_fastcor.xy ${root}_slowcor.xy | awk '{ print $4,$2 }' | psxy -X7.1  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_fscor_pmp.xy -X7.1  -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Slow\":/${maxamp2}:\"Fast\":wsen  -O -K >>$psfile\n\
 \n\
 \n\
 # 4 cm Rad Transverse, corrected \n\
 psxy ${root}_radcor.xy -X-7.1 -Y-3 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX7.1/3 -Ba5f1:\"Time (s)\":/${maxamp}::wsen -W1p -O -K >>$psfile\n\
-psxy ${root}_tracor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tracor.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Corrected Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Corrected Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_radcor.xy ${root}_tracor.xy | awk '{ print $4,$2 }' | psxy -X7.1 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_rtcor_pmp.xy -X7.1 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
@@ -1138,10 +1269,18 @@ paste ${root}_tmp_tracc.xy ${root}_tmp_reftra.xy | awk '{ print $1,$2-$4 }' > ${
 \n\
 # 4 cm Residual (Observed - reference)\n\
 psxy ${root}_tmp_resrad.xy -X-7.1 -Y-3 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX7.1/3 -Ba5f1:\"Time (s)\":/${maxamp}::wSen -W1p -O -K >>$psfile\n\
-psxy ${root}_tmp_restra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n\
-pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
+psxy ${root}_tmp_restra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,blue,- -O -K >>$psfile\n");
+    if (par->make_grd == MAKE_GMT5) {
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -F+f12p,Times-Roman+jLT -O -K >>$psfile\n\
+0.05 0.95  Residual Radial-Transverse\n\
+EOF\n");
+    }else { 
+        fprintf(output,"pstext <<EOF -JX -R0/1/0/1 -O -K >>$psfile\n\
 0.05 0.95 12 0 0 LT Residual Radial-Transverse\n\
-EOF\n\
+EOF\n");
+    }
+fprintf(output,"\
+\n\
 paste ${root}_tmp_resrad.xy ${root}_tmp_restra.xy | awk '{ print $4,$2 }' | psxy -X7.1 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 #psxy ${root}_rtcor_pmp.xy -X7.1 -R-${maxamp}/${maxamp}/-${maxamp}/${maxamp} -JX3/3 -W1p -B${maxamp}:\"Transverse\":/${maxamp2}:\"Radial\":wsen  -O -K >>$psfile\n\
 \n\
