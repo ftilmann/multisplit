@@ -20,7 +20,7 @@ EXEC = multisplit split_cor error_stack
 default: $(EXEC)
 
 multisplit: multisplit.o  rmeantaper.o gsl_seis.o invfisher.o betai.o sac_help.o
-	$(CC) $(CFLAGS) -o $(BIN)/multisplit $^ $(SACLIB) $(GSLLIBS) $(LIBS)
+	$(CC) $(CFLAGS) -o $@ $^ $(SACLIB) $(GSLLIBS) $(LIBS)
 
 split_cor: split_cor.o gsl_seis.o sac_help.o
 	$(CC) $(CFLAGS) -o $@ $^ $(SACLIB) $(GSLLIBS) $(LIBS)
