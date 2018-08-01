@@ -10,7 +10,12 @@
 
 /* Code uses sac,  gsl and gslblas libraries and needs GMT programs to be installed */
 
-/* History: */
+/* History: 
+  no version number: single layer splitting
+  v0.1   : first version with double layer splitting
+*/
+#define MULTISPLIT_VERSION "0.1a"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +41,7 @@
 
 int verbose=0;
 #define VRB(command) { if(verbose) { command  ; fflush(stdout); }}
+#define ASSERT(cond,msg) { if (!(cond)) {   fprintf(stderr,"ASSERTION VIOLATION: %s\n ABORT \n",msg);  exit(10);}}
 
 char warn_str[1024];
 char abort_str[1024];
@@ -49,12 +55,13 @@ int main(int argc, char **argv)
   float maxsumlag;
   gsl_vector_float *hor1,*hor2,*ref1,*ref2;
  
-  hor_split *hsplit;
+  hor_split *hsplit,*hsplit_top,*hsplit_bot;
   /* Grid search arrays */
   gsl_matrix *mat_res,*mat_pol,*mat_delay, *mat_alpha;
+  gsl_vector *res_energy_doublelayer;
 
   long ldum1,ldum2;
-  int n,m;
+  int n,m,n_top,m_top,n_bot,m_bot;
   int mod_par;
   char tmpstring[256],phase[9];
 
@@ -152,7 +159,25 @@ int main(int argc, char **argv)
     }
     break  ;
   case DOUBLE_HOR_SPLIT:
-    abort_msg("Double layer splitting not implemented yet");
+    hsplit_top=&(par->model_q.split_par.top);
+    m_top=(hsplit_top->fastmax-hsplit_top->fastmin+TOLERANCE)/hsplit_top->faststep + 1;
+    n_top=(hsplit_top->timemax-hsplit_top->timemin+TOLERANCE)/hsplit_top->timestep + 1;
+    hsplit_bot=&(par->model_q.split_par.bot);
+    m_bot=(hsplit_bot->fastmax-hsplit_bot->fastmin+TOLERANCE)/hsplit_bot->faststep + 1;
+    n_bot=(hsplit_bot->timemax-hsplit_bot->timemin+TOLERANCE)/hsplit_bot->timestep + 1;
+    //    VRB(printf("hsplit_top = %f %f %f    %f\n",
+    //	       hsplit_top->fastmin, hsplit_top->fastmax,hsplit_top->faststep, (hsplit_top->fastmax-hsplit_top->fastmin+TOLERANCE)/hsplit_top->faststep + 1));
+    //VRB(printf("hsplit_top = %f %f %f\n",
+    //       hsplit_top->timemin, hsplit_top->timemax,hsplit_top->timestep ));
+
+    VRB(printf("Grid search matrix size %d x %d x %d x %d = %d\n",m_top,n_top,m_bot,n_bot,m_top*n_top*m_bot*n_bot));
+    res_energy_doublelayer=gsl_vector_alloc(m_top*n_top*m_bot*n_bot);
+    /* for Debug purposes to make sure all elements of vector filled */
+    gsl_vector_set_all( res_energy_doublelayer,-1.234);
+/*     if (par->method==CORREL) { */
+/*       mat_delay=gsl_matrix_alloc(m,n); */
+/*       mat_alpha=gsl_matrix_alloc(m,n); */
+/*     } */
     break  ;
   }
   
@@ -161,7 +186,11 @@ int main(int argc, char **argv)
   case MINEVALUE:
   case MINTRANSVERSE:
     mod_par=(par->method==MINEVALUE ? 3 : 2);
-    single_split_sks(par->method, hsplit, hor1, hor2, wbeg, wlen, par->hdr_hor1->delta, par->hdr_hor1->baz, mat_res, mat_pol);
+    if (par->model== SINGLE_HOR_SPLIT) {
+      single_split_sks(par->method, hsplit, hor1, hor2, wbeg, wlen, par->hdr_hor1->delta, par->hdr_hor1->baz, mat_res, mat_pol);
+    } else if (par->model== DOUBLE_HOR_SPLIT) {
+      double_split_sks(par->method, hsplit_top,hsplit_bot, hor1, hor2, wbeg, wlen, par->hdr_hor1->delta, par->hdr_hor1->baz, res_energy_doublelayer);
+    }
     break;
   case CONV:
     abort_msg("CONV method not implemented yet");
@@ -174,6 +203,7 @@ int main(int argc, char **argv)
   }
 
   /* Now we have the error surface and have to pick the best value and do error analysis */
+  VRB(printf("Error analysis\n"));
   if (par->model==SINGLE_HOR_SPLIT) {
     switch(par->method) {
     case MINEVALUE:
@@ -193,8 +223,113 @@ int main(int argc, char **argv)
       err_single_split_sks(par, mat_res,hor1,hor2,wbeg,wlen,2,phase,mat_delay,mat_alpha,ref1,ref2,refwbeg);
       break;
     }
+  } else if (par->model==DOUBLE_HOR_SPLIT) {
+    switch(par->method) {
+    case MINEVALUE:
+    case MINTRANSVERSE:
+      err_double_split_sks(par,res_energy_doublelayer,hor1,hor2,wbeg,wlen,phase);
+      break;
+    default:
+      abort_msg("Error analysis for double layer splitting only implemented for minimum eigenvaluer and minimum transverse criteria");
+      break;      
+    }
   }
   return(0);
+}
+
+void err_double_split_sks(ms_params *par, gsl_vector *res_energy_doublelayer,  gsl_vector_float *north, gsl_vector_float *east,long beg, long len,  char *phase) {
+  /* Error analysis and output 
+      *res_energy_doublelayer    unwrapped four-dimensional matrix of misfits
+    
+      Task:
+      * writes 4-D error surface as binary file (for later averaging)
+      * output best estimate (note that this is not meaningful due to non-uniqueness for single event measurement
+      */
+  hor_split *hsplit_top=&par->model_q.split_par.top;
+  hor_split *hsplit_bot=&par->model_q.split_par.bot;
+  int  m_top=(hsplit_bot->fastmax-hsplit_bot->fastmin+TOLERANCE)/hsplit_bot->faststep + 1;
+  int  n_top=(hsplit_bot->timemax-hsplit_bot->timemin+TOLERANCE)/hsplit_bot->timestep + 1;
+  int  m_bot=(hsplit_bot->fastmax-hsplit_bot->fastmin+TOLERANCE)/hsplit_bot->faststep + 1;
+  int  n_bot=(hsplit_bot->timemax-hsplit_bot->timemin+TOLERANCE)/hsplit_bot->timestep + 1;
+  long int imin;
+  int j_top,k_top,j_bot,k_bot;
+  double emin;
+  double best_fast_top, best_time_top, best_fast_bot, best_time_bot;
+  sachdr *hdr=par->hdr_hor1;
+  char evname[256],tmpstring[256],*methodstring;
+  float delta=par->hdr_hor1->delta;
+  int split_par=4;  /* Number of splitting parameters fast and spl delay for top and bottom layer */
+  double data_dof=par->dof_s * (len * delta - MAX(par->window.taper,0.0));
+  double dof;
+  int mod_par;
+  FILE *output;
+
+  WRITEVEC("res_energy_doublelayer.xy",res_energy_doublelayer);
+
+  switch (par->method) {
+  case MINTRANSVERSE:
+    methodstring=strdup("MinimumTransverse");
+    mod_par=0;
+    break;
+  case MINEVALUE:
+    methodstring=strdup("MinimumEigenvalue");
+    mod_par=1;
+    break;
+  }
+  dof=data_dof-mod_par-split_par;
+
+  /* determine minimum solution */
+  imin=gsl_vector_min_index(res_energy_doublelayer);
+  emin=gsl_vector_get(res_energy_doublelayer,imin);
+  // ind2sub: get to 4-D index from two-D index
+  k_bot=imin % n_bot;
+  j_bot=(imin / n_bot) % m_bot;
+  k_top=(imin / (n_bot*m_bot)) % n_top;
+  j_top=(imin / (n_bot*m_bot*n_top)) % m_top ;   // which should be the same as (imin / (n_bot*m_bot*n_top) 
+  best_fast_top=hsplit_top->fastmin+j_top*hsplit_top->faststep;
+  best_time_top=hsplit_top->timemin+k_top*hsplit_top->timestep;
+  best_fast_bot=hsplit_bot->fastmin+j_bot*hsplit_bot->faststep;
+  best_time_bot=hsplit_bot->timemin+k_bot*hsplit_bot->timestep;
+
+  /* stdout: */
+  make_event_name(evname,hdr,EVN_YYJJJHHMM);
+  printf("Event:            %s\n",evname); 
+  printf("Station:          %8.8s\n",hdr->kstnm);
+  printf("Backazimuth (dg): %3.0f\n",hdr->baz);
+  printf("Distance (dg):    %3.0f\n",hdr->gcarc);
+  printf("Depth (km):       %3.0f\n",hdr->evdp);
+  printf("Phase:            %-8s\n",phase); 
+  printf("%s: %f\n",methodstring,emin);
+  printf("Top Fast dir.:    %3.0f  Split Delay: %4.2f s\n",best_fast_top,best_time_top); 
+  printf("Bot Fast dir.:    %3.0f  Split Delay: %4.2f s\n",best_fast_bot,best_time_bot); 
+
+  /* Err_hdr */
+  strcpy(tmpstring, par->root);
+  strcat(tmpstring, "_err2.hdr");
+  output=fopen(tmpstring,"w");
+  if (!output) { 
+    sprintf(abort_str,"Cannot open %s for output.",tmpstring);
+    abort_msg(abort_str);
+  }
+  fprintf(output,"%s %d %f\n",methodstring,split_par,dof);
+  fprintf(output,"4\n");
+  fprintf(output,"%d %d %d %d\n",m_top,n_top,m_bot,n_bot);
+  fprintf(output,"TopFast     %f %f %f\n",hsplit_top->fastmin,hsplit_top->fastmin+(m_top-1)*hsplit_top->faststep,hsplit_top->faststep);
+  fprintf(output,"TopSplitDly %f %f %f\n",hsplit_top->timemin,hsplit_top->timemin+(n_top-1)*hsplit_top->timestep,hsplit_top->timestep);
+  fprintf(output,"BotFast     %f %f %f\n",hsplit_bot->fastmin,hsplit_bot->fastmin+(m_bot-1)*hsplit_bot->faststep,hsplit_bot->faststep);
+  fprintf(output,"BotSplitDly %f %f %f\n",hsplit_bot->timemin,hsplit_bot->timemin+(n_bot-1)*hsplit_bot->timestep,hsplit_bot->timestep);
+  fclose(output);
+  /* err bin */
+  strcpy(tmpstring, par->root);
+  strcat(tmpstring, "_err2.bin");
+  output=fopen(tmpstring,"wb");
+  if (!output) { 
+    sprintf(abort_str,"Cannot open %s for output.",tmpstring);
+    abort_msg(abort_str);
+  }
+  gsl_vector_fwrite(output, res_energy_doublelayer);
+  fclose(output);
+
 }
 
 
@@ -794,7 +929,7 @@ gmtdefaults -D > gmt.conf\n\
 gmtset PS_PAGE_ORIENTATION portrait PROJ_LENGTH_UNIT cm FONT_LABEL 12p,Helvetica,black FONT_ANNOT_PRIMARY 10p,Helvetica,black PS_MEDIA a4 FORMAT_FLOAT_OUT %%lg\n");
     } else {
       fprintf(output,"\
-gmtdefaults -D >.gmtdefaults\n\
+gmtdefaults -D >.gmtdefaults4\n\
 gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n");
     }
     fprintf(output,"\
@@ -932,7 +1067,7 @@ set timerange=( `awk 'NR==1 { print $1 } { lastx=$1 } END { print lastx }' ${roo
 \n\
 set psfile=${root}-aux.ps\n\
 \n\
-gmtdefaults -D >.gmtdefaults\n\
+gmtdefaults -D >.gmtdefaults4\n\
 gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n\
 # 3cm Descriptive text\n\
 pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
@@ -1481,8 +1616,127 @@ void single_split_correl(int method, hor_split *hsplit, float maxshift, gsl_vect
   CMAT_FREE(Cfs);
 }
 
+void double_split_sks(int method, hor_split *hsplit_top, hor_split *hsplit_bot, gsl_vector_float *north, gsl_vector_float *east, long beg, long len, float delta, float baz, gsl_vector *res_energy_doublelayer ) 
+{
+ /* Grid search for double-layer SKS splitting */
+  /* Inputs: 
+      method: MINTRANSVERSE or MINEVALUE
+      hsplit_top: Input parameters for grid search top layer
+      hsplit_bot: Input parameters for grid search bottom layer
+      north:   north component seismogram (gsl_vector_float)
+      east:    east component seismogram (gsl_vector_float)
+      delta:   sampling interval
+      baz:     backazimuth
+    Output: are 2D matrices
+      m_res_energy_double:  4-D misfit surface (minimum represents best model)
+
+     beg,len: position within the time-series vector at zero offset - note that some information from outside this window is used based on time delay in top layer
+              If the input vectors are too short to accommodate the maximum time shift, they are zero-padded to sufficient length
+*/
+
+  /* The strategy is to rotate and shift in the time-domain the time series for the top layer, then use the single-split code on the top-layer corrected waveforms for the bottom layer */
+  double top_fast,c,s,time;
+  long itime;
+
+  int m_top=(hsplit_top->fastmax-hsplit_top->fastmin+TOLERANCE)/hsplit_top->faststep + 1;
+  int n_top=(hsplit_top->timemax-hsplit_top->timemin+TOLERANCE)/hsplit_top->timestep + 1;
+  int m_bot=(hsplit_bot->fastmax-hsplit_bot->fastmin+TOLERANCE)/hsplit_bot->faststep + 1;
+  int n_bot=(hsplit_bot->timemax-hsplit_bot->timemin+TOLERANCE)/hsplit_bot->timestep + 1;
+  int i,j,k;
+  gsl_matrix *m_res_energy=gsl_matrix_alloc(m_bot,n_bot);
+  gsl_matrix *m_pol=gsl_matrix_alloc(m_bot,n_bot);   /* is not used further but needed as input argument for single_split_sks */
+  gsl_vector_float *vec_fast;
+  gsl_vector_float *vec_slow;
+  gsl_vector_float_view vue_fastcor, vue_slowcor,vue_v1, vue_v2, vue_va, vue_vb;
+  gsl_vector_view vue_res_energy_doublelayer_row;
+  gsl_vector_float *northcor =gsl_vector_float_alloc(len);  
+  gsl_vector_float *eastcor=gsl_vector_float_alloc(len);  
+  
+  long itimemax=(long)ROUND(hsplit_top->timemax/delta)+TOLERANCE;
+  long ibeg,ilen;
+  long offsetmax=itimemax/2+1; 
+
+
+  ASSERT(m_top*n_top*m_bot*n_bot==res_energy_doublelayer->size,"double_split_sks: size of preallocated output vector m_res_energy_doublelayer does not match definitions");
+  /* Initialise - fast direction - N; slow direction - east */
+
+  VRB(printf("sks_Grid search matrix size %d x %d x %d x %d = %d\n",m_top,n_top,m_bot,n_bot,m_top*n_top*m_bot*n_bot));
+
+
+
+
+  /* Cut out a long enough sequence from data, zero-padding if necessary */
+  // use calloc to set input vector elements to zero
+  vec_fast=gsl_vector_float_calloc(north->size+2*offsetmax);  
+  vec_slow=gsl_vector_float_calloc(north->size+2*offsetmax);
+  // set vec_fast to north and vec_slow to east
+  // only copy those parts which could potentially be needed (governed by offsetmax)
+  // and zero-pad if no real data available
+  ibeg=offsetmax-beg;
+  if (ibeg<0) ibeg=0;
+  ilen=len+2*offsetmax-ibeg;
+  if (ibeg+ilen > north->size) ilen=north->size-ibeg;
+  vue_v1=gsl_vector_float_subvector(vec_fast,ibeg,ilen);
+  vue_v2=gsl_vector_float_subvector(vec_slow,ibeg,ilen);
+  vue_va=gsl_vector_float_subvector(north,beg+ibeg-offsetmax,ilen);
+  vue_vb=gsl_vector_float_subvector(east, beg+ibeg-offsetmax,ilen);
+
+  gsl_vector_float_memcpy(&vue_v1.vector, &vue_va.vector);
+  gsl_vector_float_memcpy(&vue_v2.vector, &vue_vb.vector); 
+
+  // reset beg to account for the shift 
+  beg=offsetmax; 
+
+  /* Rotate in place to first vec_fast direction (NBL the negative angle is used as gsl_rotate assumes positiv CCW rotation \
+     but azimuth is measured CW from North*/
+  gsl_float_rotate(vec_fast,vec_slow,-hsplit_top->fastmin);
+ 
+  for (top_fast=hsplit_top->fastmin,j=0; top_fast<=hsplit_top->fastmax+TOLERANCE; top_fast+=hsplit_top->faststep, j++) {
+    VRB(printf("Top j=%d Fast=%f \n",j,top_fast));
+    /* rot: rotate from ne to fs */
+    for (time=hsplit_top->timemin,k=0; time<=hsplit_top->timemax+TOLERANCE; time+=hsplit_top->timestep, k++) {
+      itime=(long)ROUND(time/delta);
+      
+/*       VRB(printf("k=%d time=%f itime=%d\n",k,time,itime)); */
+      vue_fastcor=gsl_vector_float_subvector(vec_fast,beg-itime/2,len);
+      vue_slowcor=gsl_vector_float_subvector(vec_slow,beg-itime/2+itime,len);
+
+      // rotate back to north-south system (later I can try dealing with this by manipulating the backazimuth I think 
+      gsl_vector_float_memcpy(northcor, &vue_fastcor.vector);
+      gsl_vector_float_memcpy(eastcor, &vue_slowcor.vector); 
+      gsl_float_rotate(northcor,eastcor,top_fast);      
+
+      single_split_sks(method,hsplit_bot,northcor,eastcor,0,len,delta,baz,m_res_energy,m_pol);
+      // copy result into appropriate part of big results vector
+      for (i=0; i<m_res_energy->size1; i++) {
+        // VRB(printf("Copying row i %i\n",i));
+	vue_res_energy_doublelayer_row=gsl_vector_subvector(res_energy_doublelayer,j*n_top*m_bot*n_bot+k*m_bot*n_bot+i*n_bot,n_bot);
+	// Debug: double check that all values are unset
+	ASSERT(gsl_vector_max(&vue_res_energy_doublelayer_row.vector) <= 0.0,"Trying to set element of res_energy_doublelayer twice");
+	  
+	gsl_matrix_get_row(&vue_res_energy_doublelayer_row.vector,m_res_energy,i);
+      }     
+    }
+    /* rotate to next angle */
+    gsl_float_rotate(vec_fast,vec_slow,-hsplit_top->faststep);
+  }
+}
+
 void single_split_sks(int method, hor_split *hsplit, gsl_vector_float *north, gsl_vector_float *east, long beg, long len, float delta, float baz, gsl_matrix *m_res_energy, gsl_matrix *m_pol) {
- /* Grid search for SKS splitting */
+ /* Grid search for single layer SKS splitting */
+  /* Inputs: 
+      method: MINTRANSVERSE or MINEVALUE
+      hsplit: Input parameters for grid search
+      north:   north component seismogram (gsl_vector_float)
+      east:    east component seismogram (gsl_vector_float)
+      delta:   sampling interval
+      baz:     backazimuth
+    Output: are 2D matrices
+      m_res_energy:  misfit surface (minimum represents best model
+      m_pol:  final inferred polarisation, for MINEVALUE, this is derived from first eigenvector, for MINTRANSVERSE simply inferred from baz mod 180
+(  for future extensions  
+     beg,len: currently must be set to 0 and length of north component
+  */
   float *cnn,*cee,*cne,*data_e,*data_n;
   long npts;
   long maxlag,n2,itime;
@@ -1502,7 +1756,8 @@ void single_split_sks(int method, hor_split *hsplit, gsl_vector_float *north, gs
   gsl_matrix *m2_evec=gsl_matrix_alloc(2,2);
   gsl_vector *eval=gsl_vector_alloc(2);
 
-  VRB(printf("in single_split_sks %f %f %f\n",hsplit->timemax,delta,ROUND(hsplit->timemax/delta)));
+  // suppress following print-out because this is overwhelming if it is inside a double layer loop iteration
+  //  VRB(printf("in single_split_sks %f %f %f\n",hsplit->timemax,delta,ROUND(hsplit->timemax/delta)));
   npts=north->size;
   maxlag=(long)ROUND(hsplit->timemax/delta);
 
@@ -1574,7 +1829,7 @@ void single_split_sks(int method, hor_split *hsplit, gsl_vector_float *north, gs
 /*   VRB(printf("m2_cor0:\n"); gsl_matrix_fprintf(stdout,m2_cor0,"%g")); */
 
   for (fast=hsplit->fastmin,j=0; fast<=hsplit->fastmax+TOLERANCE; fast+=hsplit->faststep, j++) {
-    VRB(printf("j=%d Fast=%f \n",j,fast));
+    // VRB(printf("j=%d Fast=%f \n",j,fast));
     /* rot: rotate from ne to fs */
     c=cos(fast*PI/180); s=sin(fast*PI/180);
     gsl_matrix_set(m2_rot,0,0,(double)c);
@@ -1923,12 +2178,12 @@ void parse(int argc, char **argv, ms_params *par) {
       par->model = DOUBLE_HOR_SPLIT; 
       if ( iarg+3>=argc ) 
 	abort_msg("-double option must be followed by 3 arguments (stepfast, stepdelay, maxdelay)");
-      par->model_q.split_par.top.faststep=par->model_q.split_par.bot.faststep= atof(argv[++iarg]);
-      par->model_q.split_par.top.fastmin =par->model_q.split_par.bot.fastmin = 0;
-      par->model_q.split_par.top.fastmax =par->model_q.split_par.bot.fastmax = 180;
-      par->model_q.split_par.top.timestep=par->model_q.split_par.bot.timestep= atof(argv[++iarg]);
-      par->model_q.split_par.top.timemin =par->model_q.split_par.bot.timemin = 0;
-      par->model_q.split_par.top.timemax =par->model_q.split_par.bot.timemax = atof(argv[++iarg]);
+      par->model_q.split_par.top.faststep=  par->model_q.split_par.bot.faststep= atof(argv[++iarg]);
+      par->model_q.split_par.top.fastmin =  par->model_q.split_par.bot.fastmin = 0;
+      par->model_q.split_par.top.fastmax =  par->model_q.split_par.bot.fastmax = 180;
+      par->model_q.split_par.top.timestep=  par->model_q.split_par.bot.timestep= atof(argv[++iarg]);
+      par->model_q.split_par.top.timemin =  par->model_q.split_par.bot.timemin = 0;
+      par->model_q.split_par.top.timemax =  par->model_q.split_par.bot.timemax = atof(argv[++iarg]);
     }
     else if(!strcasecmp(argv[iarg],"-singlesub") ) {
       par->model = SINGLE_HOR_SPLIT; 
@@ -1997,6 +2252,10 @@ void parse(int argc, char **argv, ms_params *par) {
     }
     else if(!strcasecmp(argv[iarg],"-h") ) {
       usage("multisplit");
+    }
+    else if(!strcasecmp(argv[iarg],"-version") ) {
+      fprintf(stderr,"Version: %s\n",MULTISPLIT_VERSION);
+      exit(10);
     }
     else {
       fprintf(stderr,"%s ",argv[iarg]);
@@ -2098,10 +2357,13 @@ Optional modifiers\n\
 Other options\n\
 \n\
 -h                       Show this help text\n\
+-version                Show version number\n\
 \n\
 ");
+  fprintf(stderr,"Version: %s\n",MULTISPLIT_VERSION);
   exit(10);
 }
+
 
   /* Spares:
                          The first digit gives the parameter number for x-axis, the second 

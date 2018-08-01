@@ -46,6 +46,20 @@
 #define TRUE 1
 #define FALSE 0
 
+#define WRITEVEC(name,vec) { {\
+	FILE *vectorout;\
+	vectorout=fopen(name,"w");\
+	if (!vectorout) { \
+      sprintf(abort_str,"Cannot open %s for output.",name);\
+      abort_msg(abort_str);\
+    }\
+    gsl_vector_fprintf(vectorout,vec,"%f");\
+    fclose(vectorout); }\
+  }
+
+	
+
+
 typedef int logical;
 
 
@@ -124,7 +138,9 @@ typedef struct {
 
 /* Function protoptypes */
 void abort_msg(char *);
+void double_split_sks(int method, hor_split *hsplit_top, hor_split *hsplit_bot, gsl_vector_float *north, gsl_vector_float *east, long beg, long len, float delta, float baz, gsl_vector *res_energy_doublelayer );
 void err_single_split_sks(ms_params *par, gsl_matrix *m_res_energy, gsl_vector_float *north, gsl_vector_float *east,long beg, long len, long mod_par, char *phase,  gsl_matrix *m_aux1, gsl_matrix *m_aux2, gsl_vector_float *ref_north, gsl_vector_float *ref_east, long refbeg);
+void err_double_split_sks(ms_params *par, gsl_vector *res_energy_doublelayer,  gsl_vector_float *north, gsl_vector_float *east,long beg, long len, char *phase);
 float find_phase(sachdr *hdr,char *phase_name, char *phase_out);
 gsl_vector_float *find_window(sachdr *hdr, gsl_vector_float *data, analysis_window *win, float maxlag, long *beg, long *len, char *phase);
 double invfisher(double nu1,double nu2,double conf);

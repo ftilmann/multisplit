@@ -5,7 +5,7 @@ CC=gcc
 # Adapt to location of SAC distribution 
 SACDIR=/usr/local/sac
 SACLIB = -lsacio
-CFLAGS = -I$(SACDIR)/include  -L$(SACDIR)/lib  
+CFLAGS = -g -I$(SACDIR)/include  -L$(SACDIR)/lib  
 
 LIBS = 
 GSLLIBS = -lgsl -lgslcblas -lm
