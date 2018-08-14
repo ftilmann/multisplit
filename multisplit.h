@@ -57,6 +57,16 @@
     fclose(vectorout); }\
   }
 
+#define WRITEVECFLOAT(name,vec) { {\
+	FILE *vectorout;\
+	vectorout=fopen(name,"w");\
+	if (!vectorout) { \
+      sprintf(abort_str,"Cannot open %s for output.",name);\
+      abort_msg(abort_str);\
+    }\
+    gsl_vector_float_fprintf(vectorout,vec,"%f");\
+    fclose(vectorout); }\
+  }
 	
 
 

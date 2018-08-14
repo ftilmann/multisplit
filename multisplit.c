@@ -13,6 +13,7 @@
 /* History: 
   no version number: single layer splitting
   v0.1   : first version with double layer splitting
+       bug fix in single_split_sks - when calculating convolution in freq domain, the exceptions at i=0 and i=N/2 were not taken into account properly
 */
 #define MULTISPLIT_VERSION "0.1a"
 
@@ -41,7 +42,7 @@
 
 int verbose=0;
 #define VRB(command) { if(verbose) { command  ; fflush(stdout); }}
-#define ASSERT(cond,msg) { if (!(cond)) {   fprintf(stderr,"ASSERTION VIOLATION: %s\n ABORT \n",msg);  exit(10);}}
+#define ASSERT(cond,msg) { if (!(cond)) {   fprintf(stderr,"ASSERTION VIOLATION: %s\n ABORT \n",msg);  /* exit(10); */}}
 
 char warn_str[1024];
 char abort_str[1024];
@@ -264,7 +265,7 @@ void err_double_split_sks(ms_params *par, gsl_vector *res_energy_doublelayer,  g
   int mod_par;
   FILE *output;
 
-  WRITEVEC("res_energy_doublelayer.xy",res_energy_doublelayer);
+/*   WRITEVEC("res_energy_doublelayer.xy",res_energy_doublelayer); */
 
   switch (par->method) {
   case MINTRANSVERSE:
@@ -281,6 +282,7 @@ void err_double_split_sks(ms_params *par, gsl_vector *res_energy_doublelayer,  g
   /* determine minimum solution */
   imin=gsl_vector_min_index(res_energy_doublelayer);
   emin=gsl_vector_get(res_energy_doublelayer,imin);
+
   // ind2sub: get to 4-D index from two-D index
   k_bot=imin % n_bot;
   j_bot=(imin / n_bot) % m_bot;
@@ -1693,11 +1695,13 @@ void double_split_sks(int method, hor_split *hsplit_top, hor_split *hsplit_bot, 
  
   for (top_fast=hsplit_top->fastmin,j=0; top_fast<=hsplit_top->fastmax+TOLERANCE; top_fast+=hsplit_top->faststep, j++) {
     VRB(printf("Top j=%d Fast=%f \n",j,top_fast));
-    /* rot: rotate from ne to fs */
+    /* rot: rotate from ne to fs - done by initial rotation and then incremental*/
     for (time=hsplit_top->timemin,k=0; time<=hsplit_top->timemax+TOLERANCE; time+=hsplit_top->timestep, k++) {
       itime=(long)ROUND(time/delta);
-      
-/*       VRB(printf("k=%d time=%f itime=%d\n",k,time,itime)); */
+/*       if ( j!=17 || k!=26 ){ */
+        
+/*         continue;  */
+/*       } */
       vue_fastcor=gsl_vector_float_subvector(vec_fast,beg-itime/2,len);
       vue_slowcor=gsl_vector_float_subvector(vec_slow,beg-itime/2+itime,len);
 
@@ -1706,6 +1710,15 @@ void double_split_sks(int method, hor_split *hsplit_top, hor_split *hsplit_bot, 
       gsl_vector_float_memcpy(eastcor, &vue_slowcor.vector); 
       gsl_float_rotate(northcor,eastcor,top_fast);      
 
+/*       if (j==07 && k==0 ) { */
+/* 	WRITEVECFLOAT("northcor0700.xy",northcor); */
+/* 	WRITEVECFLOAT("eastcor0700.xy",eastcor); */
+/*       } */
+/*       if (j==25 && k==0 ) { */
+/* 	WRITEVECFLOAT("northcor2500.xy",northcor); */
+/* 	WRITEVECFLOAT("eastcor2500.xy",eastcor); */
+/*       } */
+
       single_split_sks(method,hsplit_bot,northcor,eastcor,0,len,delta,baz,m_res_energy,m_pol);
       // copy result into appropriate part of big results vector
       for (i=0; i<m_res_energy->size1; i++) {
@@ -1713,7 +1726,7 @@ void double_split_sks(int method, hor_split *hsplit_top, hor_split *hsplit_bot, 
 	vue_res_energy_doublelayer_row=gsl_vector_subvector(res_energy_doublelayer,j*n_top*m_bot*n_bot+k*m_bot*n_bot+i*n_bot,n_bot);
 	// Debug: double check that all values are unset
 	ASSERT(gsl_vector_max(&vue_res_energy_doublelayer_row.vector) <= 0.0,"Trying to set element of res_energy_doublelayer twice");
-	  
+
 	gsl_matrix_get_row(&vue_res_energy_doublelayer_row.vector,m_res_energy,i);
       }     
     }
@@ -1767,7 +1780,7 @@ void single_split_sks(int method, hor_split *hsplit, gsl_vector_float *north, gs
 /*     gsl_vector_float_view tmpvecview; */
     /* tapered sequences - can use fft to calculate cross-correlations */
     n2=nxtpwr2(npts+maxlag);
-    VRB(printf("calculate cross-correlation with FFT maxlag=%ld npts=%ld n2=%ld\n",maxlag,npts,n2));
+/*     VRB(printf("calculate cross-correlation with FFT maxlag=%ld npts=%ld n2=%ld\n",maxlag,npts,n2)); */
     cnn=(float *)malloc(n2*sizeof(float));
     cee=(float *)malloc(n2*sizeof(float));
     cne=(float *)malloc(n2*sizeof(float));
@@ -1785,13 +1798,27 @@ void single_split_sks(int method, hor_split *hsplit, gsl_vector_float *north, gs
     gsl_fft_real_float_radix2_transform(data_e,1,n2);
     /* Multiply with complex conjugate in Freq domain */
 /*     VRB(printf("Correlation in freq domain\n")); */
-    for (i=1;i<=n2/2;i++) {
-      cnn[i]=ABS2(data_n[i],data_n[n2-i]); /*REAL*/   /* cnn=data_n* data_n */
-      cnn[n2-i]=0;              /*IMAG*/
-      cee[i]=ABS2(data_e[i],data_e[n2-i]); /*REAL*/   /* cee=data_e* data_e */
-      cee[n2-i]=0;             /*IMAG*/
-      cne[i]=data_n[i]*data_e[i]+data_n[n2-i]*data_e[n2-i]; /*REAL*/  /* cne=data_n* data_e */
-      cne[n2-i]=-data_n[n2-i]*data_e[i]+data_n[i]*data_e[n2-i];              /*IMAG*/
+    for (i=0;i<=n2/2;i++) {
+      if (i==0 || i==n2/2 ) {
+	// Special case: only real components exist 
+	cnn[i]=SQR(data_n[i]);
+	cee[i]=SQR(data_e[i]);
+	cne[i]=data_n[i]*data_e[i];
+      } else {
+	// real component in index [i], imaginary component in index [j]
+	cnn[i]=ABS2(data_n[i],data_n[n2-i]); /*REAL*/   /* cnn=data_n* data_n */
+	cnn[n2-i]=0;              /*IMAG*/
+	cee[i]=ABS2(data_e[i],data_e[n2-i]); /*REAL*/   /* cee=data_e* data_e */
+	cee[n2-i]=0;             /*IMAG*/
+	cne[i]=data_n[i]*data_e[i]+data_n[n2-i]*data_e[n2-i]; /*REAL*/  /* cne=data_n* data_e */
+	cne[n2-i]=-data_n[n2-i]*data_e[i]+data_n[i]*data_e[n2-i];              /*IMAG*/
+      }
+/*       ASSERT(cnn[i]<1e4,"unusually large real cnn"); */
+/*       ASSERT(cnn[n2-i]<1e4,"unusually large imag cnn"); */
+/*       ASSERT(cee[i]<1e4,"unusually large real cee"); */
+/*       ASSERT(cee[n2-i]<1e4,"unusually large imag cee"); */
+/*       ASSERT(cne[i]<1e4,"unusually large real cee"); */
+/*       ASSERT(cne[n2-i]<1e4,"unusually large imag cee"); */
     }
     /* IFFT */
 /*     VRB(printf("IFFT\n");) */
@@ -1866,6 +1893,7 @@ void single_split_sks(int method, hor_split *hsplit, gsl_vector_float *north, gs
 	gsl_matrix_set(m2_corn,0,1,(double)cne[itime]);
 	gsl_matrix_set(m2_corn,1,0,(double)cne[n2-itime]); /* cne[itime]=cen[-itime]=cen[n2-itime] */
 	gsl_matrix_set(m2_corn,1,1,(double)cee[itime]);
+
 /* 	VRB(printf("m2_corn:\n"); gsl_matrix_fprintf(stdout,m2_corn,"%g")); */
 	/* fscorn = rot*corn*rot'  (correlation matrix in fast-slow coordinate system between advanced and retarded traces) */
 	gsl_blas_dgemm(CblasNoTrans,CblasNoTrans,1.0,m2_rot,m2_corn,0.0,m2_aux);
@@ -1900,7 +1928,18 @@ void single_split_sks(int method, hor_split *hsplit, gsl_vector_float *north, gs
 	gsl_blas_dgemm(CblasNoTrans,CblasTrans,1.0,m2_fscorn,m2_rotbaz,0.0,m2_aux);
 	gsl_matrix_set(m_res_energy,j,k,gsl_matrix_get(m2_aux,1,1)/tot_energy);
 	gsl_matrix_set(m_pol,j,k,fmod(baz,180.));
-/* 	VRB(printf("Norm. Transverse energy: %f %f\n",gsl_matrix_get(m2_aux,1,1)/tot_energy,gsl_matrix_get(m_res_energy,j,k))); */
+/* 	ASSERT(gsl_matrix_get(m_res_energy,j,k)>=0.0,"negative energy"); */
+	if ( gsl_matrix_get(m_res_energy,j,k)<0.0 ) {
+	  fprintf(stderr,"ASSERTION VIOLATION: negative energy %d %d %f\n",j,k,gsl_matrix_get(m_res_energy,j,k));
+	}
+/* 	if (fabs(gsl_matrix_get(m_res_energy,j,k)-0.861669)<0.000001  ) { */
+/* 	  fprintf(stderr,"ASSERTION VIOLATION: Weird value %d %d %f  itime %ld cnn[itime] %f\n",j,k,gsl_matrix_get(m_res_energy,j,k),itime,cnn[itime]); */
+/* 	  gsl_matrix_fprintf(stdout,m2_corn,"%g"); */
+/*                 WRITEVECFLOAT("north.xy",north);  */
+/*         	WRITEVECFLOAT("east.xy",east);  */
+/* 		//	if (j!=0 && k!=0)  exit(10); */
+/* 	} */
+	/* VRB(printf("Norm. Transverse energy: %f %f\n",gsl_matrix_get(m2_aux,1,1)/tot_energy,gsl_matrix_get(m_res_energy,j,k))); */
 	break;
       }
     } /* continue for(time...) */
