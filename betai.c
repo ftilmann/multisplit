@@ -6,7 +6,7 @@
 double betai(double a, double b, double x)
 {
   if (x < 0.0 || x > 1.0) {
-    fprintf(stderr,"Numerical error: Bad x in routine betai");
+    fprintf(stderr,"Numerical error: Bad x (%f) in routine betai\n",x);
     exit(10);
   }
   return gsl_sf_beta_inc(a,b,x);

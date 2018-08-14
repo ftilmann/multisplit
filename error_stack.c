@@ -21,6 +21,7 @@
 
 int verbose=0;
 #define VRB(command) { if(verbose) { command  ; fflush(stdout); }}
+#define ASSERT(cond,msg) { if (!(cond)) {   fprintf(stderr,"ASSERTION VIOLATION: %s\n ABORT \n",msg);  exit(10);}}
 
 #if !defined NAN
 #define NAN (strtod("NAN",NULL))
@@ -57,6 +58,24 @@ void usage(char *cmd);
 double invfisher(double nu1,double nu2,double conf);
 double betai(double a, double b, double x);
 
+
+void ind2sub(int *sub,long int ind1d, int sizes[], int rank) {
+  /* convert one-dimensional index to multi-dimensional indices */
+  /* Input:   int1d  : 1D index
+     sizes[] : Arrays giving the number of elements in each dimension
+     rank: number of dimensions (indices)
+     Output:  sub[]   A vector containing the multi-dimensional indices */
+  int i;
+
+  for(i=rank-1; i>=0; i--) {
+    sub[i]=ind1d % sizes[i];
+    /*       imin_1d-=imin[k][i]; */ // redundant as this part is removed by integer division in next line anywat 
+    ind1d /= sizes[i]; 
+    // VRB(printf("DEBUG i: %d imin_1d: %ld m[i]: %d  imin[i]: %d\n",i,imin_1d,m[i],imin[k][i]))
+  }
+  ASSERT(ind1d==0,"ind1d should be zero at this stage, as all indices determined and there is no larger dimension left.")
+}
+
  
 int main(int argc, char **argv)
 {
@@ -69,7 +88,8 @@ int main(int argc, char **argv)
   char methodstring[128],label[MAXDIM][128];
   int dim,m[MAXDIM];
   float min[MAXDIM],max[MAXDIM],step[MAXDIM];
-  gsl_matrix *err_surf;
+  gsl_matrix *err_surf, *err_stack;  // for 2D error-surfaces
+  gsl_vector *v_err_surf, *v_err_stack;  // for arbitrary dimension error surfaces
   float weight;
   /* Properties of first file */
   char rmethodstring[128],rlabel[MAXDIM][128];
@@ -77,10 +97,10 @@ int main(int argc, char **argv)
   float rmin[MAXDIM],rmax[MAXDIM],rstep[MAXDIM];
   /* Variables for ensemble (including arrays for remembering a value for each file) */
   int imin[MAXFILES][MAXDIM],imint[MAXDIM];
+  long imin_1d,imint_1d,tot_length;
   float dof[MAXFILES],postconf[MAXFILES];
   float tot_dof,valmin[MAXFILES];
   float tot_weight;
-  gsl_matrix *err_stack;
   double emin,best[MAXDIM],lbound[MAXDIM],ubound[MAXDIM],err[MAXDIM];
   /* error analysis */
   double conf[9]={.68,  .95,.99, .999,.9999,.99999,.999999,.9999999, .99999999 };  /* conf[1] is the level of significance */
@@ -90,6 +110,7 @@ int main(int argc, char **argv)
   int periodic;
   char cmdstring[128];
   gsl_vector_view dvue1;
+  gsl_matrix_view vue_matrix;
 
   int status;
   char rejectstring[128];
@@ -127,17 +148,22 @@ int main(int argc, char **argv)
     if(k==0) {
       strcpy(rmethodstring,methodstring);
       rdim=dim;
+      tot_length=1;
       for(i=0;i<dim;i++) {
 	rm[i]=m[i]; rmin[i]=min[i]; rmax[i]=max[i]; rstep[i]=step[i];
 	strcpy(rlabel[i],label[i]);
+	tot_length*=m[i];
       }
-      if (rdim==2) {
-	err_stack=gsl_matrix_alloc(rm[0],rm[1]);
-	gsl_matrix_set_zero(err_stack); 
-	err_surf =gsl_matrix_alloc(rm[0],rm[1]);
-      } else {
-	abort_msg("Currently code not set up for number of dimensions not equal 2");
-      }			   
+      v_err_stack=gsl_vector_calloc(tot_length);
+      v_err_surf=gsl_vector_alloc(tot_length);
+
+/*       if (rdim==2) { */
+/* 	err_stack=gsl_matrix_alloc(rm[0],rm[1]); */
+/* 	gsl_matrix_set_zero(err_stack);  */
+/* 	err_surf =gsl_matrix_alloc(rm[0],rm[1]); */
+/*       } else { */
+/* 	abort_msg("Currently code not set up for number of dimensions not equal 2"); */
+/*       }			    */
     } else { /* k!=0: check that definitions consistent with first file */
       if (strcmp(rmethodstring,"Mixed") && strcmp(rmethodstring,methodstring)) {
 	sprintf(warn_str,"Method in %s and %s disagree:\n %s vs %s\n This is OK if you wish to combine different methods",par->fnames[0],par->fnames[k],rmethodstring,methodstring);
@@ -155,22 +181,45 @@ int main(int argc, char **argv)
 	}
       }
     }
-    if( gsl_matrix_fread(bin_file,err_surf) ) {
+    // dimension agnostic code 
+    if( gsl_vector_fread(bin_file,v_err_surf) ) {
       sprintf(abort_str,"There was a problem reading %s.bin",par->fnames[k]);
       abort_msg(abort_str);
     }
-    /* find minimum index */
-    gsl_matrix_min_index(err_surf,(size_t *)&imin[k][0],(size_t *)&imin[k][1]);
-    valmin[k]=gsl_matrix_get(err_surf,imin[k][0],imin[k][1]);
-    printf("%25s %s: %6f  %s: %6f emin: %f dof: %f\n",par->fnames[k],
-	   rlabel[0],min[0]+imin[k][0]*step[0],
-	   rlabel[1],min[1]+imin[k][1]*step[1],valmin[k],dof[k]);
+    imin_1d=gsl_vector_min_index(v_err_surf);
+    valmin[k]=gsl_vector_get(v_err_surf,imin_1d);
+/*    Code specific to 2D matrix
+/*     if( gsl_matrix_fread(bin_file,err_surf) ) { */
+/*       sprintf(abort_str,"There was a problem reading %s.bin",par->fnames[k]); */
+/*       abort_msg(abort_str); */
+/*     } */
+//     /* find minimum index  */
+/*     gsl_matrix_min_index(err_surf,(size_t *)&imin[k][0],(size_t *)&imin[k][1]); */
+/*     valmin[k]=gsl_matrix_get(err_surf,imin[k][0],imin[k][1]); */
+/*     printf("%25s %s: %6f  %s: %6f emin: %f dof: %f\n",par->fnames[k], */
+/* 	   rlabel[0],min[0]+imin[k][0]*step[0], */
+/* 	   rlabel[1],min[1]+imin[k][1]*step[1],valmin[k],dof[k]); */
+    printf("%25s emin:%f  dof: %f",par->fnames[k],valmin[k],dof[k]);
+    VRB(printf("\n DEBUG imin_1d: %ld  dim: %d\n",imin_1d,dim));
+    ind2sub(&imin[k][0],imin_1d,rm,dim);
+
+    for(i=0; i<dim; i++) {
+      printf(" %s: %6f", rlabel[i],min[i]+imin[k][i]*step[i]);
+    }
+    printf("\n");
     if (par->weight)  /* normalise by minimum value if requested */
       weight=1/valmin[k];
     else
       weight=1;
-    gsl_matrix_scale(err_surf,weight);
-    gsl_matrix_add(err_stack,err_surf);
+/* Code for 2D matrix */
+/*     gsl_matrix_scale(err_surf,weight); */
+/*     gsl_matrix_add(err_stack,err_surf); */
+    /* dimension agnostic */
+    gsl_vector_scale(v_err_surf,weight);
+    gsl_vector_add(v_err_stack,v_err_surf);
+
+
+
     tot_dof += weight*(dof[k]+split_par);;    
       /* I am not sure if this way of manipulating degrees of reedom is correct.*/
       /* However, we must introduce some weighing of the degrees of freedom, otherwise */
@@ -183,102 +232,130 @@ int main(int argc, char **argv)
      fclose(hdr_file);
   }
 
-  /* Analysis of error surface */
-  gsl_matrix_min_index(err_stack,(size_t *)&imint[0],(size_t *)&imint[1]);
-  emin=gsl_matrix_get(err_stack,imint[0],imint[1]);
 
-  best[0]=imint[0]*step[0];
-  best[1]=imint[1]*step[1];
+  /* Analysis of error surface */
+  /*  2D code: */
+  /*   gsl_matrix_min_index(err_stack,(size_t *)&imint[0],(size_t *)&imint[1]); */
+  /*   emin=gsl_matrix_get(err_stack,imint[0],imint[1]); */
+  imint_1d=gsl_vector_min_index(v_err_stack);
+  emin=gsl_vector_get(v_err_stack,imint_1d);
+  ind2sub(imint,imint_1d,rm,dim);
+
+  for (i=0;i<dim;i++) {
+    best[i]=rmin[i]+imint[i]*step[i];
+  }
 
   tot_dof=par->nfiles*tot_dof/tot_weight;
   tot_dof-=split_par;
 
+  VRB(printf("DEBUG: before calculating confidence intervals\n"));
+
+  float tot_dof_eff=tot_dof;
+  float tot_dof_thresh=200.;
+  if ( tot_dof>tot_dof_thresh) {
+    fprintf(stderr,"WARNING: for very large total number of degrees of freedom \n\
+(equiv. total length of analysed data), the confidence interval calculation leads \n\
+to underflow. The effective number of degrees of freedom for conf. level calculation\n\
+ has thus been reduced from %.2f to %.0f\n",tot_dof,tot_dof_thresh);
+    tot_dof_eff=tot_dof_thresh;
+  } 
   for(i=0;i<9;i++) {
-    contour[i]=1+split_par*invfisher((double)split_par,(double)tot_dof,conf[i])/tot_dof;
+    VRB(printf("i: %d confidence %f  tot_dof %f split_par %f\n",i,conf[i],tot_dof,split_par));
+    contour[i]=1+split_par*invfisher((double)split_par,(double)tot_dof_eff,conf[i])/tot_dof_eff;
     VRB(printf("i: %d confidence %f contour %f tot_dof %f split_par %f\n",i,conf[i],contour[i],tot_dof,split_par));
-    if (rmin[1]==0.0 && contour[i]*emin<gsl_matrix_get(err_stack,0,0))
-      null=conf[i];
   }
-  if (par->gmt) {
-    output=open_for_write(par->root,".cont");
-    for (i=0;i<9;i++){
-      fprintf(output,"%f %s\n",contour[i]*emin, (i==1 ? "A" : "C" ));
-    }
-    fclose(output);
-  }
-  if ((null)<0) 
-    strcpy(rejectstring, "UNK");
-  else if (null==0.0)
-    strcpy(rejectstring, "<68");
-  else
-    sprintf(rejectstring,"%7.4f",null*100);
-
-  
-  /* Global search parameter 1 (normally this is splitting delay): */
-  for (k1=rm[1]-1; k1>=imint[1];k1--) {
-    dvue1=gsl_matrix_column(err_stack,k1);
-    if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
-      break;
-  }
-  for (k2=0; k2<=imint[1];k2++) {
-    dvue1=gsl_matrix_column(err_stack,k2);
-    if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
-      break;
-  }
-
-  lbound[1]=rmin[1]+k2*rstep[1];
-  ubound[1]=rmin[1]+k1*rstep[1];
-  err[1]=MAX(ubound[1]-best[1],best[1]-lbound[1]);
-  VRB(printf("Global search time %f-%f (E: %f)\n",lbound[1],ubound[1],err[1]));
-  if (k1==rm[1]-1 && k2==0)     /* both bounds at limit of grid search -> no constraints */
-    /*     err_time=nan("");    */  /* set to NaN */ 
-    err[1]=NAN;
-  else if (k1==rm[1]-1 )     /* upper bounds at limit of grid search */
-    err[1]=-err[1];    /* set error to negative (as flag) */
-
-  /* Global search parameter 0: (normally this is the fast direction */
-  if(!strcasecmp(rlabel[0],"Fast") && 180+rmin[0]-rmax[0]<2*rstep[0]) {
-    VRB(printf("Periodic fast direction (parameter 0)\n"));
-    periodic=1;
-  } else {
-    VRB(printf("Non-Periodic fast direction (parameter 1)\n"));
-    periodic=0; 
-  }
-
-
-  for (j1=(periodic ? imint[0]+rm[0]/2 : rm[0]-1); j1>=imint[0];j1--) {
-    dvue1=gsl_matrix_row(err_stack,PER(rm[0],j1));
-    if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
-      break;
-  }
-  for (j2=(periodic ? imint[0]-rm[0]/2 : 0); j2<=imint[0];j2++) {
-    dvue1=gsl_matrix_row(err_stack,PER(rm[0],j2));
-    if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
-      break;
-  }
-  ubound[0]=rmin[0]+j1*step[0];
-  lbound[0]=rmin[0]+j2*step[0];
-  err[0]=MAX(ubound[0]-best[0],best[0]-lbound[0]);
-  VRB(printf("Global search fast direction %f-%f (E: %f)\n",lbound[0],ubound[0],err[0]));
-
-  if (err[0]>75. && periodic)
-    err[0]=NAN;
-  else if (!periodic && j1==rm[0]-1 && j2==0)     /* both bounds at limit of grid search -> no constraints */
-    /*     err_time=nan("");    */  /* set to NaN */ 
-    err[0]=NAN;
-  else if (!periodic && ( j1==rm[0]-1 || j2==0 )  )     /* upper bounds at limit of grid search */
-    err[0]=-err[1];    /* set error to negative (as flag) */
+  VRB(printf("DEBUG: after calculating confidence intervals\n"));
 
   printf("Number of files in stack:   %d\n",par->nfiles);
   printf("Total degrees of freedom:   %f\n",tot_dof);
   printf("Norm. energy minimum:       %f\n",emin/tot_weight);
 
-  printf("%24s:    %3.0f  +- %3.0f  (% 4.0f - %3.0f )\n",rlabel[0],best[0],err[0],lbound[0],ubound[0]);
-  printf("%24s:    %4.2f +- %4.2f (% 4.2f - %4.2f )\n",rlabel[1],best[1],err[1],lbound[1],ubound[1]);
-  for (i=2;i<rdim;i++) 
-    printf("%24s:    %f +- %f (%f - %f )\n",rlabel[i],best[i],err[i],lbound[i],ubound[i]);
-  if (strncmp(rejectstring,"UNK",3))
-    printf("Reject Null (%%) : %s (E: %f)\n",rejectstring,gsl_matrix_get(err_stack,0,0)/tot_weight);
+  if ( dim==2 ) {
+    vue_matrix=gsl_matrix_view_vector(v_err_stack,m[0],m[1]);
+    err_stack=&vue_matrix.matrix;
+    if (par->gmt) {
+      output=open_for_write(par->root,".cont");
+      for (i=0;i<9;i++){
+	fprintf(output,"%f %s\n",contour[i]*emin, (i==1 ? "A" : "C" ));
+      }
+      fclose(output);
+    }
+    null=-1;
+    for(i=0;i<9;i++) {
+      if (rmin[1]==0.0 && contour[i]*emin<gsl_matrix_get(err_stack,0,0))
+	null=conf[i];
+    }
+    if ((null)<0) 
+      strcpy(rejectstring, "UNK");
+    else if (null==0.0)
+      strcpy(rejectstring, "<68");
+    else
+      sprintf(rejectstring,"%7.4f",null*100);
+
+  
+    /* Global search parameter 1 (normally this is splitting delay): */
+    for (k1=rm[1]-1; k1>=imint[1];k1--) {
+      dvue1=gsl_matrix_column(err_stack,k1);
+      if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
+	break;
+    }
+    for (k2=0; k2<=imint[1];k2++) {
+      dvue1=gsl_matrix_column(err_stack,k2);
+      if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
+	break;
+    }
+
+    lbound[1]=rmin[1]+k2*rstep[1];
+    ubound[1]=rmin[1]+k1*rstep[1];
+    err[1]=MAX(ubound[1]-best[1],best[1]-lbound[1]);
+    VRB(printf("Global search time %f-%f (E: %f)\n",lbound[1],ubound[1],err[1]));
+    if (k1==rm[1]-1 && k2==0)     /* both bounds at limit of grid search -> no constraints */
+      /*     err_time=nan("");    */  /* set to NaN */ 
+      err[1]=NAN;
+    else if (k1==rm[1]-1 )     /* upper bounds at limit of grid search */
+      err[1]=-err[1];    /* set error to negative (as flag) */
+
+    /* Global search parameter 0: (normally this is the fast direction */
+    if(!strcasecmp(rlabel[0],"Fast") && 180+rmin[0]-rmax[0]<2*rstep[0]) {
+      VRB(printf("Periodic fast direction (parameter 0)\n"));
+      periodic=1;
+    } else {
+      VRB(printf("Non-Periodic fast direction (parameter 1)\n"));
+      periodic=0; 
+    }
+    for (j1=(periodic ? imint[0]+rm[0]/2 : rm[0]-1); j1>=imint[0];j1--) {
+      dvue1=gsl_matrix_row(err_stack,PER(rm[0],j1));
+      if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
+	break;
+    }
+    for (j2=(periodic ? imint[0]-rm[0]/2 : 0); j2<=imint[0];j2++) {
+      dvue1=gsl_matrix_row(err_stack,PER(rm[0],j2));
+      if (gsl_vector_min(&dvue1.vector) <= contour[1]*emin) 
+	break;
+    }
+    ubound[0]=rmin[0]+j1*step[0];
+    lbound[0]=rmin[0]+j2*step[0];
+    err[0]=MAX(ubound[0]-best[0],best[0]-lbound[0]);
+    VRB(printf("Global search fast direction %f-%f (E: %f)\n",lbound[0],ubound[0],err[0]));
+
+    if (err[0]>75. && periodic)
+      err[0]=NAN;
+    else if (!periodic && j1==rm[0]-1 && j2==0)     /* both bounds at limit of grid search -> no constraints */
+      /*     err_time=nan("");    */  /* set to NaN */ 
+      err[0]=NAN;
+    else if (!periodic && ( j1==rm[0]-1 || j2==0 )  )     /* upper bounds at limit of grid search */
+      err[0]=-err[1];    /* set error to negative (as flag) */
+    printf("%24s:    %3.0f  +- %3.0f  (% 4.0f - %3.0f )\n",rlabel[0],best[0],err[0],lbound[0],ubound[0]);
+    printf("%24s:    %4.2f +- %4.2f (% 4.2f - %4.2f )\n",rlabel[1],best[1],err[1],lbound[1],ubound[1]); 
+    if (strncmp(rejectstring,"UNK",3))
+      printf("Reject Null (%%) : %s (E: %f)\n",rejectstring,gsl_matrix_get(err_stack,0,0)/tot_weight);
+  }   /* end of special part for single layer splitting  */
+  else {
+    /* part for dim>2, no more plotting, no more upper, lower bound, instead draw from probability distribution */
+    for (i=0;i<rdim;i++) 
+      printf("%24s: %f \n",rlabel[i],best[i]);
+  }
+
 
   /* write bin file */
   output=open_for_write(par->root,".hdr");
@@ -291,15 +368,20 @@ int main(int argc, char **argv)
     fprintf(output,"%-8s %f %f %f\n",rlabel[i],rmin[i],rmax[i],rstep[i]);
   fclose(output);
   output=open_for_write(par->root,".bin");
-  gsl_matrix_fwrite(output,err_stack);
+/*   gsl_matrix_fwrite(output,err_stack); */
+  gsl_vector_fwrite(output,v_err_stack);
   fclose(output);
 
   /* now read all input error surfaces again, and check which confidence interval the best choice corresponds to */
   for (k=0;k<par->nfiles;++k) {
     double x;
     bin_file=open_for_read(par->fnames[k],".bin");
-    gsl_matrix_fread(bin_file,err_surf);  /* we read this successfully before */
-    emin=gsl_matrix_get(err_surf,imint[0],imint[1]); /* get energy value at best splitting parameters of ensemble */
+//     gsl_matrix_fread(bin_file,err_surf);  /* we read this successfully before */ 
+//     emin=gsl_matrix_get(err_surf,imint[0],imint[1]); /* get energy value at best splitting parameters of ensemble */ 
+    gsl_vector_fread(bin_file,v_err_surf);
+    emin=gsl_vector_get(v_err_surf,imint_1d);
+    VRB(printf("File %d: %s emin %f  valmin[k]: %f\n",k,par->fnames[k],emin,valmin[k]));
+
     /* this is the forward calculation of the confidence level from the energy ratio */
     x=(emin/valmin[k]-1)*dof[k]/split_par;
     x=MIN(1,(double)(dof[k]/(dof[k]+split_par*x))); /* for exact co-incidence round-off can lead to x values slightly larger than 1, hence have to use MIN */
@@ -308,8 +390,8 @@ int main(int argc, char **argv)
     printf("Confidence value for %s : %f\n",par->fnames[k],postconf[k]);
     fclose(bin_file);
   }
-
-  if (par->gmt) {
+  
+  if (par->gmt && dim==2) {
     /*convert bin error surface to grd file*/
     sprintf(cmdstring,"xyz2grd %s.bin -D%s/%s/%s/1/0/SingleSplit/\"Created by error_stack\" -G%s.grd -I%f/%f -R%f/%f/%f/%f -ZBLd",
 	    par->root,rlabel[1],rlabel[0],methodstring,par->root,
