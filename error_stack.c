@@ -17,11 +17,25 @@
 #include <strings.h>
 #include <stddef.h>
 #include <math.h>
+#include <errno.h>
 #include <gsl/gsl_matrix.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
+
 
 int verbose=0;
 #define VRB(command) { if(verbose) { command  ; fflush(stdout); }}
 #define ASSERT(cond,msg) { if (!(cond)) {   fprintf(stderr,"ASSERTION VIOLATION: %s\n ABORT \n",msg);  exit(10);}}
+#define WRITEVEC(name,vec) { {\
+	FILE *vectorout;\
+	vectorout=fopen(name,"w");\
+	if (!vectorout) { \
+      sprintf(abort_str,"Cannot open %s for output.",name);\
+      abort_msg(abort_str);\
+    }\
+    gsl_vector_fprintf(vectorout,vec,"%f");\
+    fclose(vectorout); }\
+  }
 
 #if !defined NAN
 #define NAN (strtod("NAN",NULL))
@@ -43,6 +57,9 @@ typedef struct {
   int weight;
   char root[256];
   int nfiles;
+  int mcsamples;
+  int use_exact; 
+  float scale_dof;
   char *fnames[MAXFILES];
 } params;
 
@@ -79,10 +96,13 @@ void ind2sub(int *sub,long int ind1d, int sizes[], int rank) {
  
 int main(int argc, char **argv)
 {
+  const gsl_rng_type * rng_type;
+  gsl_rng * rng;
+
   params *par=(params *) malloc(sizeof(params));
   FILE *hdr_file, *bin_file;
   FILE *output;
-  int i,k;
+  int i,j,k;
   /* Properties of each file */
   float split_par;
   char methodstring[128],label[MAXDIM][128];
@@ -96,12 +116,13 @@ int main(int argc, char **argv)
   int rdim,rm[MAXDIM];
   float rmin[MAXDIM],rmax[MAXDIM],rstep[MAXDIM];
   /* Variables for ensemble (including arrays for remembering a value for each file) */
-  int imin[MAXFILES][MAXDIM],imint[MAXDIM];
+  int imin[MAXFILES][MAXDIM],imint[MAXDIM],imcmc[MAXDIM];
   long imin_1d,imint_1d,tot_length;
   float dof[MAXFILES],postconf[MAXFILES];
   float tot_dof,valmin[MAXFILES];
   float tot_weight;
-  double emin,best[MAXDIM],lbound[MAXDIM],ubound[MAXDIM],err[MAXDIM];
+  
+  double maxval,emin,misfit,logprob,value,best[MAXDIM],lbound[MAXDIM],ubound[MAXDIM],err[MAXDIM];
   /* error analysis */
   double conf[9]={.68,  .95,.99, .999,.9999,.99999,.999999,.9999999, .99999999 };  /* conf[1] is the level of significance */
   double contour[9];
@@ -199,6 +220,7 @@ int main(int argc, char **argv)
 /*     printf("%25s %s: %6f  %s: %6f emin: %f dof: %f\n",par->fnames[k], */
 /* 	   rlabel[0],min[0]+imin[k][0]*step[0], */
 /* 	   rlabel[1],min[1]+imin[k][1]*step[1],valmin[k],dof[k]); */
+    dof[k]*=par->scale_dof;
     printf("%25s emin:%f  dof: %f",par->fnames[k],valmin[k],dof[k]);
     VRB(printf("\n DEBUG imin_1d: %ld  dim: %d\n",imin_1d,dim));
     ind2sub(&imin[k][0],imin_1d,rm,dim);
@@ -220,7 +242,7 @@ int main(int argc, char **argv)
 
 
 
-    tot_dof += weight*(dof[k]+split_par);;    
+    tot_dof += weight*(dof[k]+par->scale_dof*split_par);;    
       /* I am not sure if this way of manipulating degrees of reedom is correct.*/
       /* However, we must introduce some weighing of the degrees of freedom, otherwise */
       /* I could take one good measurement and lots of bad ones, get the results of the */
@@ -246,7 +268,8 @@ int main(int argc, char **argv)
   }
 
   tot_dof=par->nfiles*tot_dof/tot_weight;
-  tot_dof-=split_par;
+  tot_dof-=par->scale_dof*split_par;
+  
 
   VRB(printf("DEBUG: before calculating confidence intervals\n"));
 
@@ -352,9 +375,71 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
   }   /* end of special part for single layer splitting  */
   else {
     /* part for dim>2, no more plotting, no more upper, lower bound, instead draw from probability distribution */
+    gsl_vector *v_logprob_surf =v_err_surf;   // resuse already allocated vector to save memory but give it a new name for transparency
+    // display best solution
     for (i=0;i<rdim;i++) 
       printf("%24s: %f \n",rlabel[i],best[i]);
+    // convert everything into logprobabilities
+
+    for (i=0;i<v_logprob_surf->size; i++) {
+	misfit=gsl_vector_get(v_err_stack,i);
+        // use distribution for unknown error level and number of data points equal to number of Degrees of freedom       
+        // Presumably because the number of data points is very large, this puts nearly all probability onto the minimum misfit 
+        // point 
+	logprob=-((tot_dof+split_par)/2) * log(misfit);   // pow(misfit,-(tot_dof+split_par)/2.);
+        // Alternative: assume error level given by minimum
+        // logprob=exp(-misfit/(2*emin));
+	gsl_vector_set(v_logprob_surf,i,logprob); 
+    }
+
+    // Convert to absolute probabilities; we need to substract maximum of logarithm to avoid overflow
+    maxval=gsl_vector_max(v_logprob_surf);
+    for (i=0;i<v_logprob_surf->size; i++) { 
+        value=exp(gsl_vector_get(v_logprob_surf,i)-maxval);
+	gsl_vector_set(v_logprob_surf,i,value);
+    }
+    // WRITEVEC("probabilities.txt",v_logprob_surf);  
+    // WRITEVEC("misfit.txt",v_err_stack);  
+    
+    // Calculate cumulative sum 
+    for (i=1;i<v_logprob_surf->size; i++) {
+	value=gsl_vector_get(v_logprob_surf,i-1)+gsl_vector_get(v_logprob_surf,i);
+	gsl_vector_set(v_logprob_surf,i,value);
+    }
+    // WRITEVEC("cumprob.xy",v_logprob_surf);  
+    
+    // generate Monte-Carlo samples
+    maxval=gsl_vector_get(v_logprob_surf,i-1);
+    VRB(printf("Generating MC samples\n"));
+    gsl_rng_env_setup();
+    rng_type = gsl_rng_default;
+    rng = gsl_rng_alloc (rng_type);
+    output=open_for_write(par->root,"_mc.x");
+    fprintf(output,"#");
+    for (j=0;j<rdim;j++) 
+      fprintf(output,"%s ",rlabel[j]);
+    fprintf(output,"\n");
+    for (i=0;i<par->mcsamples;i++) {
+        double r;
+	r=gsl_rng_uniform(rng)*maxval;
+        for (k=0;k<v_logprob_surf->size; k++) {
+	    if (r<gsl_vector_get(v_logprob_surf,k)) 
+	       break;
+	}
+	ind2sub(imcmc,k,rm,dim);
+	for (j=0;j<dim;j++) {
+            double out=rmin[j]+imcmc[j]*step[j];
+            // randomize within each box covered
+            if (!par->use_exact) {
+	       out+= (-0.5+gsl_rng_uniform(rng))*step[j];
+	    }
+	    fprintf(output,"%f ",out);
+	}
+	fprintf(output,"\n");
+    }
+    fclose(output);
   }
+
 
 
   /* write bin file */
@@ -498,6 +583,9 @@ void parse(int argc, char **argv, params *par) {
   par->weight=0;
   par->gmt=0;
   par->nfiles=0;
+  par->use_exact=0;
+  par->mcsamples=100;
+  par->scale_dof=1.;
 
   iarg=0;
   while(++iarg<argc) {
@@ -508,6 +596,8 @@ void parse(int argc, char **argv, params *par) {
     if(!strcasecmp(argv[iarg],"--")) {
       iarg++;
       break; } 
+    else if(!strncasecmp(argv[iarg],"-exact",6)) {
+      par->use_exact = 1; }
     else if(!strncasecmp(argv[iarg],"-weig",5)) {
       par->weight = 1; }
     else if(!strncasecmp(argv[iarg],"-gmt",4)) {
@@ -516,6 +606,22 @@ void parse(int argc, char **argv, params *par) {
       if ( iarg+1>=argc ) 
 	abort_msg("-name must be followed by 1 argument (file name root)");
       strncpy(par->root,argv[++iarg],256); par->root[255]='\0'; 
+    }
+    else if(!strncasecmp(argv[iarg],"-mc",3) ) {
+      if ( iarg+1>=argc ) 
+	abort_msg("-mc must be followed by 1 argument (number of samples)");
+      par->mcsamples=(int)strtol(argv[++iarg],NULL,10); 
+      if (errno || par->mcsamples<=0 ) {
+	 abort_msg("Argument of -mc must be a positive integer number");
+      }
+    }
+    else if(!strncasecmp(argv[iarg],"-scale-dof",10) ) {
+      if ( iarg+1>=argc )  
+	abort_msg("-scale-dof must be followed by 1 argument (float)");
+      par->scale_dof=(float)strtod(argv[++iarg],NULL);
+      if (errno || par->scale_dof<=0 ) {
+	 abort_msg("Argument of -mc must be a positive (float) number");
+      }
     }
     else if(!strncasecmp(argv[iarg],"-h",2)) {
       usage("error_stack"); }
@@ -568,7 +674,7 @@ OUTPUT FILES\n\
 .bin, .hdr            the stacked error surfaces\n\
 \n\
 .grd,.gmt,.ps         grdfile, GMT scripts and postscript for visualisation \n\
-                      of result\n\
+                      of result (only for number of parameters equal 2)\n		\
                        (if -gmt option has been selected)\n\
 \n\
 OPTIONS:\n\
@@ -576,10 +682,18 @@ OPTIONS:\n\
 -weight               normalise error surfaces by minimum value before\n\
                       stacking (default is no normalisation)\n\
 \n\
--name root            Set root of output file names\n\
+-name <root>           Set root of output file names\n\
                       (Default: derive name from first input file root)\n\
 \n\
--gmt                  Plot results with GMT\n\
+-gmt                  Plot results with GMT (only for number of parameters equal 2\n	\
+\n\
+-mc <samples>         How many Monte Carlo samples to use (only for number of parameters not equal two\n\
+                      [ Default 100]\n\
+-exact                When calculating sample of distribution, use the exact point of the grid search\n\
+                      [Default: randomize sample point within half a step length either way of the gridpoint]\n\
+-scale-dof <scalefactor> Used to scale the input degrees-of-freedom. Overestimate in number of degrees of\n\
+                      results in underestimate in uncertainty. So if the uncertainty appears too small,\n\
+                      use a scalefactor less than 1, if they appear too big, use a scalefactor of more than 1.\n\
 \n\
 -v                    Verbose output\n\
 ");
