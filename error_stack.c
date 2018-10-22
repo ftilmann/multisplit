@@ -108,8 +108,10 @@ int main(int argc, char **argv)
   char methodstring[128],label[MAXDIM][128];
   int dim,m[MAXDIM];
   float min[MAXDIM],max[MAXDIM],step[MAXDIM];
-  gsl_matrix *err_surf, *err_stack;  // for 2D error-surfaces
-  gsl_vector *v_err_surf, *v_err_stack;  // for arbitrary dimension error surfaces
+/*   gsl_matrix *err_surf; */
+  gsl_matrix *err_stack;  // for 2D error-surfaces
+
+  gsl_vector *v_err_surf[MAXFILES], *v_err_stack;  // for arbitrary dimension error surfaces
   float weight;
   /* Properties of first file */
   char rmethodstring[128],rlabel[MAXDIM][128];
@@ -141,7 +143,7 @@ int main(int argc, char **argv)
   tot_dof=0;
 /*   tot_weight=0; */
 
-  for (k=0;k<par->nfiles;++k) {
+  for (k=0;k<par->nfiles;++k) {  /* read loop */
     hdr_file=open_for_read(par->fnames[k],".hdr");
     bin_file=open_for_read(par->fnames[k],".bin");
     if ( fscanf(hdr_file,"%s %f %f\n",methodstring,&split_par,&dof[k]) != 3 ) {
@@ -176,8 +178,6 @@ int main(int argc, char **argv)
 	tot_length*=m[i];
       }
       v_err_stack=gsl_vector_calloc(tot_length);
-      v_err_surf=gsl_vector_alloc(tot_length);
-
 /*       if (rdim==2) { */
 /* 	err_stack=gsl_matrix_alloc(rm[0],rm[1]); */
 /* 	gsl_matrix_set_zero(err_stack);  */
@@ -203,12 +203,16 @@ int main(int argc, char **argv)
       }
     }
     // dimension agnostic code 
-    if( gsl_vector_fread(bin_file,v_err_surf) ) {
+    v_err_surf[k]=gsl_vector_alloc(tot_length);
+    if( gsl_vector_fread(bin_file,v_err_surf[k]) ) {
       sprintf(abort_str,"There was a problem reading %s.bin",par->fnames[k]);
       abort_msg(abort_str);
     }
-    imin_1d=gsl_vector_min_index(v_err_surf);
-    valmin[k]=gsl_vector_get(v_err_surf,imin_1d);
+  } /* end of read loop */
+
+  for (k=0;k<par->nfiles;++k) { /* Analysis loop */
+    imin_1d=gsl_vector_min_index(v_err_surf[k]);
+    valmin[k]=gsl_vector_get(v_err_surf[k],imin_1d);
 /*    Code specific to 2D matrix
 /*     if( gsl_matrix_fread(bin_file,err_surf) ) { */
 /*       sprintf(abort_str,"There was a problem reading %s.bin",par->fnames[k]); */
@@ -237,8 +241,8 @@ int main(int argc, char **argv)
 /*     gsl_matrix_scale(err_surf,weight); */
 /*     gsl_matrix_add(err_stack,err_surf); */
     /* dimension agnostic */
-    gsl_vector_scale(v_err_surf,weight);
-    gsl_vector_add(v_err_stack,v_err_surf);
+    gsl_vector_scale(v_err_surf[k],weight);
+    gsl_vector_add(v_err_stack,v_err_surf[k]);
 
 
 
@@ -249,10 +253,7 @@ int main(int argc, char **argv)
       /* good one but with apparently much diminished error because of the greater number */
       /* of DOFs */
      tot_weight+= weight; 
-
-     fclose(bin_file);
-     fclose(hdr_file);
-  }
+  } /* end of analysis loop */ 
 
 
   /* Analysis of error surface */
@@ -282,7 +283,7 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
  has thus been reduced from %.2f to %.0f\n",tot_dof,tot_dof_thresh);
     tot_dof_eff=tot_dof_thresh;
   } 
-  for(i=0;i<9;i++) {
+  for(i=0;i<9;i++) { /* loop over confidence intervals */
     VRB(printf("i: %d confidence %f  tot_dof %f split_par %f\n",i,conf[i],tot_dof,split_par));
     contour[i]=1+split_par*invfisher((double)split_par,(double)tot_dof_eff,conf[i])/tot_dof_eff;
     VRB(printf("i: %d confidence %f contour %f tot_dof %f split_par %f\n",i,conf[i],contour[i],tot_dof,split_par));
@@ -375,7 +376,8 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
   }   /* end of special part for single layer splitting  */
   else {
     /* part for dim>2, no more plotting, no more upper, lower bound, instead draw from probability distribution */
-    gsl_vector *v_logprob_surf =v_err_surf;   // resuse already allocated vector to save memory but give it a new name for transparency
+/*     gsl_vector *v_logprob_surf =v_err_surf;   // resuse already allocated vector to save memory but give it a new name for transparency */
+    gsl_vector *v_logprob_surf =gsl_vector_calloc(tot_length);
     // display best solution
     for (i=0;i<rdim;i++) 
       printf("%24s: %f \n",rlabel[i],best[i]);
@@ -457,14 +459,15 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
   gsl_vector_fwrite(output,v_err_stack);
   fclose(output);
 
-  /* now read all input error surfaces again, and check which confidence interval the best choice corresponds to */
+  /* now go through all input error surfaces again, and check which confidence interval the best choice corresponds to */
   for (k=0;k<par->nfiles;++k) {
     double x;
-    bin_file=open_for_read(par->fnames[k],".bin");
+    // no need to re-read as all inputs are stored in memory
+/*     bin_file=open_for_read(par->fnames[k],".bin"); */
 //     gsl_matrix_fread(bin_file,err_surf);  /* we read this successfully before */ 
 //     emin=gsl_matrix_get(err_surf,imint[0],imint[1]); /* get energy value at best splitting parameters of ensemble */ 
-    gsl_vector_fread(bin_file,v_err_surf);
-    emin=gsl_vector_get(v_err_surf,imint_1d);
+/*     gsl_vector_fread(bin_file,v_err_surf); */
+    emin=gsl_vector_get(v_err_surf[k],imint_1d);
     VRB(printf("File %d: %s emin %f  valmin[k]: %f\n",k,par->fnames[k],emin,valmin[k]));
 
     /* this is the forward calculation of the confidence level from the energy ratio */
@@ -473,7 +476,7 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     VRB(printf("X=%f\n",x));
     postconf[k]=1-betai((double)dof[k]/2.,(double)split_par/2,x);
     printf("Confidence value for %s : %f\n",par->fnames[k],postconf[k]);
-    fclose(bin_file);
+/*     fclose(bin_file); */
   }
   
   if (par->gmt && dim==2) {
