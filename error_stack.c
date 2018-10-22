@@ -58,10 +58,15 @@ typedef struct {
   char root[256];
   int nfiles;
   int mcsamples;
+  int bootstrap_samples; // Number of bootstrap samples
   int use_exact; 
   float scale_dof;
   char *fnames[MAXFILES];
 } params;
+
+const gsl_rng_type * rng_type;
+gsl_rng * rng;
+
 
 char warn_str[1024];
 char abort_str[1024];
@@ -93,12 +98,57 @@ void ind2sub(int *sub,long int ind1d, int sizes[], int rank) {
   ASSERT(ind1d==0,"ind1d should be zero at this stage, as all indices determined and there is no larger dimension left.")
 }
 
- 
+long *bootstrap_analysis(gsl_vector *v_err_surf[],int nfiles,int bootstrap_samples, params *par) {
+  int l,k; // loop variables 
+  unsigned long int r;
+  long imin;
+  int use_count[nfiles]; // how many times is a file represented in a bootstrap sample
+  float weight=1;  // as default use 1 for weight
+  long *imin1d_bootstrap=malloc(bootstrap_samples*sizeof(long)); 
+
+  gsl_vector *v_err_stack=gsl_vector_alloc(v_err_surf[0]->size);
+  gsl_vector *v_temp=gsl_vector_alloc(v_err_surf[0]->size);
+
+  for (l=0; l<bootstrap_samples; l++) { // Loop over bootstrap samples
+    VRB(printf("\rbootstrap sample %6d",l));
+    // reset use_counter 
+    for(k=0;k<nfiles;k++) 
+      use_count[k]=0;
+    // reset stacked error srufcae
+    gsl_vector_set_zero(v_err_stack);
+
+
+    // generate bootstrap sample counts for each file
+    for(k=0;k<nfiles;k++) {
+      r=gsl_rng_uniform_int(rng, nfiles);
+      use_count[r]++;
+    }
+
+    for(k=0;k<nfiles;k++) { /* apply multipliers */
+      if (use_count[k]==0) 
+	continue;          // can skip rest if event is not used in this bootstrap samples
+      if (par->weight) {
+	// weight with the inverse of minimum energy (if relative weighting is selected)
+	imin=gsl_vector_min_index(v_err_surf[k]);
+	weight=1/gsl_vector_get(v_err_surf[k],imin);
+      } 
+      gsl_vector_memcpy(v_temp,v_err_surf[k]);
+      gsl_vector_scale(v_temp,weight);
+      gsl_vector_add(v_err_stack,v_temp);
+    }
+    // find index of minimum in bootstrapped stacks
+    imin1d_bootstrap[l]=gsl_vector_min_index(v_err_stack);
+  }
+  // free allocated vector space
+  gsl_vector_free(v_err_stack);
+  gsl_vector_free(v_temp);
+  return(imin1d_bootstrap);
+}
+
+
+
 int main(int argc, char **argv)
 {
-  const gsl_rng_type * rng_type;
-  gsl_rng * rng;
-
   params *par=(params *) malloc(sizeof(params));
   FILE *hdr_file, *bin_file;
   FILE *output;
@@ -111,19 +161,20 @@ int main(int argc, char **argv)
 /*   gsl_matrix *err_surf; */
   gsl_matrix *err_stack;  // for 2D error-surfaces
 
-  gsl_vector *v_err_surf[MAXFILES], *v_err_stack;  // for arbitrary dimension error surfaces
+  gsl_vector *v_err_surf[MAXFILES], *v_err_stack, *v_temp;  // for arbitrary dimension error surfaces
   float weight;
   /* Properties of first file */
   char rmethodstring[128],rlabel[MAXDIM][128];
   int rdim,rm[MAXDIM];
   float rmin[MAXDIM],rmax[MAXDIM],rstep[MAXDIM];
   /* Variables for ensemble (including arrays for remembering a value for each file) */
-  int imin[MAXFILES][MAXDIM],imint[MAXDIM],imcmc[MAXDIM];
+  int imin[MAXFILES][MAXDIM],imint[MAXDIM],imcmc[MAXDIM],ibootstrap[MAXDIM];
   long imin_1d,imint_1d,tot_length;
   float dof[MAXFILES],postconf[MAXFILES];
   float tot_dof,valmin[MAXFILES];
   float tot_weight;
-  
+  long *imin1d_bootstrap;
+
   double maxval,emin,misfit,logprob,value,best[MAXDIM],lbound[MAXDIM],ubound[MAXDIM],err[MAXDIM];
   /* error analysis */
   double conf[9]={.68,  .95,.99, .999,.9999,.99999,.999999,.9999999, .99999999 };  /* conf[1] is the level of significance */
@@ -138,6 +189,12 @@ int main(int argc, char **argv)
   int status;
   char rejectstring[128];
 
+  // set up global variables related to random number generation
+  gsl_rng_env_setup();
+  rng_type = gsl_rng_default;
+  rng = gsl_rng_alloc (rng_type);
+
+  // parse command line arguments
   parse(argc,argv, par);
 
   tot_dof=0;
@@ -178,6 +235,7 @@ int main(int argc, char **argv)
 	tot_length*=m[i];
       }
       v_err_stack=gsl_vector_calloc(tot_length);
+      v_temp=gsl_vector_alloc(tot_length);
 /*       if (rdim==2) { */
 /* 	err_stack=gsl_matrix_alloc(rm[0],rm[1]); */
 /* 	gsl_matrix_set_zero(err_stack);  */
@@ -226,7 +284,7 @@ int main(int argc, char **argv)
 /* 	   rlabel[1],min[1]+imin[k][1]*step[1],valmin[k],dof[k]); */
     dof[k]*=par->scale_dof;
     printf("%25s emin:%f  dof: %f",par->fnames[k],valmin[k],dof[k]);
-    VRB(printf("\n DEBUG imin_1d: %ld  dim: %d\n",imin_1d,dim));
+    //    VRB(printf("\n DEBUG imin_1d: %ld  dim: %d\n",imin_1d,dim));
     ind2sub(&imin[k][0],imin_1d,rm,dim);
 
     for(i=0; i<dim; i++) {
@@ -241,9 +299,9 @@ int main(int argc, char **argv)
 /*     gsl_matrix_scale(err_surf,weight); */
 /*     gsl_matrix_add(err_stack,err_surf); */
     /* dimension agnostic */
-    gsl_vector_scale(v_err_surf[k],weight);
-    gsl_vector_add(v_err_stack,v_err_surf[k]);
-
+    gsl_vector_memcpy(v_temp,v_err_surf[k]);
+    gsl_vector_scale(v_temp,weight);
+    gsl_vector_add(v_err_stack,v_temp);
 
 
     tot_dof += weight*(dof[k]+par->scale_dof*split_par);;    
@@ -413,9 +471,7 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     // generate Monte-Carlo samples
     maxval=gsl_vector_get(v_logprob_surf,i-1);
     VRB(printf("Generating MC samples\n"));
-    gsl_rng_env_setup();
-    rng_type = gsl_rng_default;
-    rng = gsl_rng_alloc (rng_type);
+
     output=open_for_write(par->root,"_mc.x");
     fprintf(output,"#");
     for (j=0;j<rdim;j++) 
@@ -442,7 +498,30 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     fclose(output);
   }
 
+  if (par->bootstrap_samples>0) {
+    VRB(printf("Generating bootstrap samples\n"));
+    imin1d_bootstrap=bootstrap_analysis(v_err_surf,par->nfiles,par->bootstrap_samples,par);
+    // output bootstrap samples
 
+    output=open_for_write(par->root,"_bootstrap.x");
+    fprintf(output,"#");
+    for (j=0;j<rdim;j++) 
+      fprintf(output,"%s ",rlabel[j]);
+    fprintf(output,"\n");
+    for (i=0;i<par->bootstrap_samples;i++) {
+ 	ind2sub(ibootstrap,imin1d_bootstrap[i],rm,dim);
+	for (j=0;j<dim;j++) {
+            double out=rmin[j]+ibootstrap[j]*step[j];
+            // randomize within each box covered
+            if (!par->use_exact) {
+	       out+= (-0.5+gsl_rng_uniform(rng))*step[j];
+	    }
+	    fprintf(output,"%f ",out);
+	}
+	fprintf(output,"\n");
+    }
+    fclose(output);
+  }
 
   /* write bin file */
   output=open_for_write(par->root,".hdr");
@@ -588,6 +667,7 @@ void parse(int argc, char **argv, params *par) {
   par->nfiles=0;
   par->use_exact=0;
   par->mcsamples=100;
+  par->bootstrap_samples=0; 
   par->scale_dof=1.;
 
   iarg=0;
@@ -616,6 +696,14 @@ void parse(int argc, char **argv, params *par) {
       par->mcsamples=(int)strtol(argv[++iarg],NULL,10); 
       if (errno || par->mcsamples<=0 ) {
 	 abort_msg("Argument of -mc must be a positive integer number");
+      }
+    }
+    else if(!strncasecmp(argv[iarg],"-bootstrap",10) ) {
+      if ( iarg+1>=argc ) 
+	abort_msg("-bootstrap must be followed by 1 argument (number of samples)");
+      par->bootstrap_samples=(int)strtol(argv[++iarg],NULL,10); 
+      if (errno || par->bootstrap_samples<0 ) {   // accept 0 as meaning effectively no bootstrap samples
+	 abort_msg("Argument of -bootstrap must be a positive integer number");
       }
     }
     else if(!strncasecmp(argv[iarg],"-scale-dof",10) ) {
@@ -697,6 +785,10 @@ OPTIONS:\n\
 -scale-dof <scalefactor> Used to scale the input degrees-of-freedom. Overestimate in number of degrees of\n\
                       results in underestimate in uncertainty. So if the uncertainty appears too small,\n\
                       use a scalefactor less than 1, if they appear too big, use a scalefactor of more than 1.\n\
+\n\
+-bootstrap <samples>   Use bootstrap over error surfaces to estimate uncertainty\n\
+                      Also affected by -exact option\n\
+                      [ Default do not estimate bootstrap errors]\n\
 \n\
 -v                    Verbose output\n\
 ");
