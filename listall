@@ -1,0 +1,15 @@
+all_indvsol.dat
+baz_anisopar.dat
+do_anisocorrect.sh
+do_clear.sh
+do_get_baz_anisopar.sh
+do_plot_forall.sh
+do_plot_vars.m
+do_plot_vars.m.BAK
+do_run_multisplit.sh
+double_bootstrap.x
+multisplit
+plot_baz_anisopars.m
+README.txt
+run_batch.sh
+single_indvsol.dat
