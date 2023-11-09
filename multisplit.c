@@ -695,7 +695,8 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
   fclose(output);
 
   if (par->make_grd ) {
-    sprintf(cmdstring,"xyz2grd %s_err.bin -DSplitDly/Fast/%s/1/0/SingleSplit/\"Created by multisplit\" -G%s_err.grd -I%f/%f -R%f/%f/%f/%f -ZBLd",
+    sprintf(cmdstring,"%s %s_err.bin -DSplitDly/Fast/%s/1/0/SingleSplit/\"Created by multisplit\" -G%s_err.grd -I%f/%f -R%f/%f/%f/%f -ZBLd",
+        par->make_grd == MAKE_GMT5 ? "gmt xyz2grd" :"xyz2grd",
 	    par->root,methodstring,par->root,
 	    hsplit->timestep,hsplit->faststep,
 	    hsplit->timemin,hsplit->timemin+(n-1)*hsplit->timestep,hsplit->fastmin,hsplit->fastmin+(m-1)*hsplit->faststep);
@@ -751,7 +752,8 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
       gsl_matrix_fwrite(output, m_aux);
       fclose(output);
       if (par->make_grd ) {
-	sprintf(cmdstring,"xyz2grd %s_%s.bin -DSplitDly/Fast/%s/1/0/SingleSplit/\"Created by multisplit - minevalue mode\" -G%s_%s.grd -I%f/%f -R%f/%f/%f/%f -ZBLd",
+	sprintf(cmdstring,  "%s %s_%s.bin -DSplitDly/Fast/%s/1/0/SingleSplit/\"Created by multisplit - minevalue mode\" -G%s_%s.grd -I%f/%f -R%f/%f/%f/%f -ZBLd",
+        par->make_grd == MAKE_GMT5 ? "gmt xyz2grd" :"xyz2grd",
 		par->root,ext,descrip,par->root,ext,
 		hsplit->timestep,hsplit->faststep,
 		hsplit->timemin,hsplit->timemin+(n-1)*hsplit->timestep,hsplit->fastmin,hsplit->fastmin+(m-1)*hsplit->faststep);
@@ -901,7 +903,11 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
     if(!isnan(pol)) 
       fprintf(output,"set pol=%f\n",pol);
     fprintf(output,"cat > $root.description <<EOF\n");
-    fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
+    if (par->make_grd == MAKE_GMT5) {
+      fprintf(output,"> 10 29 15p 20  c\n");    
+    } else {
+      fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
+    }
     fprintf(output,"%s %8.8s %-8s BAZ %3.0f Dist %3.0f Dp %3.0f\n\n",evname,hdr->kstnm,phase,hdr->baz, hdr->gcarc, hdr->evdp);
     fprintf(output,"%s: Res %f",methodstring,emin);
     if (descrip1 && m_aux1)
@@ -928,22 +934,23 @@ set psfile=${root}.ps\n\
     if (par->make_grd == MAKE_GMT5) {
       fprintf(output,"\
 gmtdefaults -D > gmt.conf\n\
-gmtset PS_PAGE_ORIENTATION portrait PROJ_LENGTH_UNIT cm FONT_LABEL 12p,Helvetica,black FONT_ANNOT_PRIMARY 10p,Helvetica,black PS_MEDIA a4 FORMAT_FLOAT_OUT %%lg\n");
+gmtset PS_PAGE_ORIENTATION portrait PROJ_LENGTH_UNIT cm FONT_LABEL 12p,Helvetica,black FONT_ANNOT_PRIMARY 10p,Helvetica,black PS_MEDIA a4 FORMAT_FLOAT_OUT %%lg\n\
+# 3cm Descriptive text\n\
+pstext -M -X0 -Y0 -R0/20/0/29  -F+f14,Arial+jCT -Jx1 -K > $psfile <${root}.description\n");
     } else {
       fprintf(output,"\
 gmtdefaults -D >.gmtdefaults4\n\
-gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n");
+gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n\
+# 3cm Descriptive text\n\
+pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n");
     }
     fprintf(output,"\
-# 3cm Descriptive text\n\
-pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
 \n\
 # 8 cm Error surface\n\
+# For GMT6 need option -F1+f1p instead.\n\
 grdcontour -X2 -Y20.5 ${root}_err.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1  -Wa1.5p -Wc0.5p >>$psfile\n\
-psxy -R -JX -Sx0.3 -W2p  -O -K  >>$psfile <<EOF\n\
-$besttime $bestfast\n\
-EOF\n\
 psxy -R -JX -W1p,200/200/200,. -O -K  >>$psfile <<EOF\n\
+# Mark backazimuth\n\
 0 $baz\n\
 10 $baz\n\
 EOF\n\
@@ -958,6 +965,10 @@ if ( $?pol ) then \n\
 10 $polp\n\
 EOF\n\
 endif\n\
+# best solution\n\
+psxy -R -JX -Sx0.3 -W2p,blue  -O -K  >>$psfile <<EOF\n\
+$besttime $bestfast\n\
+EOF\n\
 # 4 cm Rad Transverse\n\
 psxy ${root}_rad.xy -Y-6.5 -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX13/4 -Ba5f1/${maxamp}::wseN -W1p -O -K >>$psfile\n\
 psxy ${root}_tra.xy -R$timerange[1]/$timerange[2]/-$maxamp/$maxamp -JX -W1p,0/0/0,. -O -K >>$psfile\n\

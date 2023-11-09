@@ -182,7 +182,7 @@ int main(int argc, char **argv)
   double null;
   int j1,j2,k1,k2;
   int periodic;
-  char cmdstring[128];
+  char cmdstring[1024];
   gsl_vector_view dvue1;
   gsl_matrix_view vue_matrix;
 
@@ -365,15 +365,16 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     null=-1;
     for(i=0;i<9;i++) {
       if (rmin[1]==0.0 && contour[i]*emin<gsl_matrix_get(err_stack,0,0))
-	null=conf[i];
+	    null=conf[i];
     }
+
     if ((null)<0) 
       strcpy(rejectstring, "UNK");
     else if (null==0.0)
       strcpy(rejectstring, "<68");
     else
       sprintf(rejectstring,"%7.4f",null*100);
-
+    fprintf(stderr,"DEBUG: Null %f Rejectstring |%s|\n",null,rejectstring);
   
     /* Global search parameter 1 (normally this is splitting delay): */
     for (k1=rm[1]-1; k1>=imint[1];k1--) {
@@ -604,7 +605,7 @@ gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_
 pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile </tmp/${root}.description\n\
  \n\
 # 8 cm Error surface\n\
-grdcontour -X2 -Y20.5 ${root}.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"$label0\":/20:\"$label1\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n\
+grdcontour -X2 -Y20.5 ${root}.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"$label1\":/20:\"$label0\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n\
 psxy -R -JX -Sx0.3 -W2p/200/100/100  -O -K  >>$psfile <<EOF\n\
 $best1 $best0\n\
 EOF\n\
