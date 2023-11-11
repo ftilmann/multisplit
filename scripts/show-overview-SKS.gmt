@@ -1,0 +1,134 @@
+#!/bin/csh 
+# Designed to be run after 
+
+use_gmt4
+
+
+# Example usage (some of this is assumed) for run
+#  set sta RUE
+#  error_stack -gmt -name ${sta]-summary *_err.bin | tee ${sta}-summary.txt
+#  show-overview.gmt ${sta}-summary $sta
+
+# Variable parameters:
+set rootin=$1
+set sta=$2
+set rootout=${sta}-overview-SKS
+set psfile=${rootout}.ps
+
+set label0="Fast Direction (deg)"
+set label1="Split Delay (s)"
+
+# 
+makecpt -T0/180/10 -Ccyclic > baz.cpt
+
+set grdrange=`grdinfo -C ${rootin}.grd | awk '{print $2 "/" $3 "/" $4 "/" $5 }'`
+
+
+ 
+gmtdefaults -D >.gmtdefaults
+gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %lg
+
+# extract
+# FPD TD BAZ ERRdelay ERRfast  # for good and fair
+# FPD TD BAZ ERRdelay ERRfast   # for poor and null splitting
+# FPD TD BAZ ERRdelay ERRfast    # for near null splitting
+
+# Good splittings : null rejected at 95% confidence; FPD err <= 10   (ignore TD error)
+awk 'FNR==2 && $18==0  { if ( $10+0>95.0 && $7+0<=10.0)  print $8,$6,$11,$9,$7 }'  *${sta}_split.txt > ${rootout}-good.xy
+# Fair splittings: null rejected at 95% confidence; FPD err <= 25
+awk 'FNR==2 && $18==0  { if ( $10+0>95.0 && $7+0<=25.0 && $7+0>10)  print $8,$6,$11,$9,$7 }'  *${sta}_split.txt > ${rootout}-fair.xy
+# Poor splittings: null rejected at 95% confidence; FPD err >25
+awk 'FNR==2 && $18==0  { if ( $10+0>95.0 && $7+0>25.0 )  print $8,$6,$11,$9,$7 }'  *${sta}_split.txt > ${rootout}-poor.xy
+# Null splittings:
+awk 'FNR==2 && $18==1 { print $8,$6,$11,$9,$7}' *${sta}_split.txt > ${rootout}-null.xy
+# Near null splitting - null rejected at less then or equal 95% conf. interval but more than 68%
+awk 'FNR==2 && $18==0 { if ($10+0<=95.0)  print $8,$6,$11,$9,$7}' *${sta}_split.txt > ${rootout}-nearnull.xy 
+
+# 3cm Descriptive text
+pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile < ${rootin}.description
+ 
+# 8 cm Error surface
+#grdcontour -X2 -Y20.5 ${root}.grd -C${root}.cont -R$grdrange -JX16/6.5 -B0.5:"$label1":/20:"$label0":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile
+
+# draw thin horizontal line at FPD (for judging if null splits are close to that line)
+awk '/Fast/ && /SplitDly/  { if ($10+0 >= .95 ) \
+     print "> -Z"$2 ; print 0,$2; print 10,$2 ;       \
+     print "> -Z"$2+90; print 0,$2+90 ; print 10,$2+90 ;       \
+     print "> -Z"$2-90; print 0,$2-90 ; print 10,$2-90 ;       \
+     }'  ${rootin}.description \
+| psxy -X2 -Y20.5 -B0.5:"$label1":/20:"$label0":WSen  -R$grdrange -JX16.9/6.5 -W1p,200/200/200,- -Cbaz.cpt -m -O -K >>$psfile
+
+# plot joint estimate but only if null splitting is rejected at 95% confidence
+awk '/Fast/ && /SplitDly/  { if ($10+0 >= .95 ) print $6, $2,$8,$4 }'  ${rootin}.description \
+| psxy -R -JX  -W2p/100/100/100 -Exy/2p,100/100/100  -O -K  >>$psfile 
+#psxy < ${rootin}_allsplit.xy -R -JX -S+0.2 -W1p  -O -K  >>$psfile
+
+awk '{print $1,$2,$3%180,$5 }' ${rootout}-good.xy |  psxy  -R -JX -Ey/+1p -Sc0.3 -Cbaz.cpt   -O -K  >>$psfile 
+awk '{print $1,$2,$3%180,$5 }' ${rootout}-fair.xy |  psxy  -R -JX -Ey/+0.5p -Sc0.2 -Cbaz.cpt   -O -K  >>$psfile 
+awk '{print $1,$2,$3%180 }' ${rootout}-poor.xy    |  psxy  -R -JX -Sc0.15 -Cbaz.cpt   -O -K  >>$psfile 
+awk '{print $1,$2,$3%180 }' ${rootout}-nearnull.xy    |  psxy  -R -JX -SD0.15  -Cbaz.cpt   -O -K  >>$psfile 
+awk '{print $1,$2,$3%180 }' ${rootout}-null.xy    |  psxy  -R -JX -S+0.2 -W1p -Cbaz.cpt   -O -K  >>$psfile 
+
+psscale -D17/3.25/6.5/0.25 -Cbaz.cpt -B45:"Backazimuth modulo 180 deg": --LABEL_FONT_SIZE=9p -O -K >> $psfile
+
+# Legend
+echo '   0 -2 125 0.4'  | psxy -R0/16.9/0/6.5 -Jx1   -Ey/+1p -Sc0.3 -Cbaz.cpt  -N  -O -K  >>$psfile    # good
+echo '   2 -2 125 0.4'  | psxy -R -Jx1  -Ey/+0.5p -Sc0.2 -Cbaz.cpt  -N  -O -K  >>$psfile    # fair
+echo '   4 -2 125'  | psxy -R -Jx1  -Sc0.15 -Cbaz.cpt  -N  -O -K  >>$psfile    # poor
+echo '   5.5 -2 125'  |  psxy -R -Jx1   -SD0.15  -Cbaz.cpt  -N  -O -K  >>$psfile  # near null
+echo  ' 9.5 -2 125'  |  psxy -R -Jx1   -S+0.2 -W1p  -Cbaz.cpt -N  -O -K  >>$psfile  # null
+echo '  12.8 -2 0.4 0.4' | psxy -Jx1 -R -W2p/100/100/100 -Exy/2p,100/100/100 -N -O -K >> $psfile # joint
+
+echo  ' 4 -2.8 ' | psxy -R -Jx1 -S+0.2 -W1p,200/200/200 -N  -O -K  >>$psfile  # null (plotted at BAZ)
+echo  "12.8 -2.8" | psxy -R -Jx1 -S-1.5 -W0.75p,gray -N  -O -K  >>$psfile
+
+pstext  -R -Jx  -D0.3/0 -N -O -K >> $psfile <<EOF
+ 0.00 -2 10 0 0 LM Good
+ 2 -2 10 0 0 LM Fair
+ 4 -2 10 0 0 LM Poor
+ 5.5 -2 10 0 0 LM Near-Null (<95%)
+ 9.5 -2 10 0 0 LM Null (<68%)
+13.2 -2.4 10 0 0 LM Joint (if not present: joint null)
+ 4 -2.8 10 0 0 LM Null (plotted with FPD=BAZ mod 180 TD=0) 
+EOF
+
+# New plots FPD vs BAZ
+set fpdrange=`echo $grdrange | awk -F/ '{print $3 "/" $4 }'`
+set tdrange=`echo $grdrange | awk -F/ '{print $1 "/" $2 }'`
+
+# draw thin horizontal line at FPD (for judging if null splits are close to that line)
+awk '/Fast/ && /SplitDly/  { if ($10+0 >= .95 ) \
+     print "> -W0.75p,gray" ; print 0,$2; print 360,$2 ;       \
+     print "> -W0.5p,lightgray,. " ; print 0,$2+90 ; print 360,$2+90 ;       \
+     print "> -W0.5p,lightgray,. " ; print 0,$2-90 ; print 360,$2-90 ;       \
+     }'  ${rootin}.description \
+| psxy -X0 -Y-11  -B90/20:"$label0":WseN -R0/360/$fpdrange -JX   -m -O -K >>$psfile
+
+awk '{print $3,$2,$3%180,$5 }' ${rootout}-good.xy |  psxy -R -JX -Ey/+1p -Sc0.3 -Cbaz.cpt   -O -K  >>$psfile
+awk '{print $3,$2,$3%180,$5 }' ${rootout}-fair.xy |  psxy  -R -JX -Ey/+0.5p -Sc0.2 -Cbaz.cpt   -O -K  >>$psfile 
+awk '{print $3,$2,$3%180,$5 }' ${rootout}-poor.xy    |  psxy  -R -Ey0.1/+0.25p -JX -Sc0.15 -Cbaz.cpt   -O -K  >>$psfile 
+awk '{print $3,$2,$3%180 }' ${rootout}-null.xy    |  psxy  -R -JX -S+0.2 -W1p -Cbaz.cpt   -O -K  >>$psfile
+awk '{print $3,$3%180;}' ${rootout}-null.xy    |  psxy  -R -JX -S+0.2 -W1p,200/200/200    -O -K  >>$psfile
+awk '{print $3,$2,$3%180 }' ${rootout}-nearnull.xy    |  psxy  -R -JX -SD0.15  -Cbaz.cpt   -O -K  >>$psfile 
+
+
+
+
+# TD vs BAZ plot
+# draw thin horizontal line at FPD (for judging if null splits are close to that line)
+awk '/Fast/ && /SplitDly/  { if ($10+0 >= .95 ) \
+     print "> -W0.75p,gray" ; print 0,$6; print 360,$6 ;       \
+     }'  ${rootin}.description \
+| psxy -X0 -Y-7  -B90:"Backazimuth":/0.5:"$label1":WSen -R0/360/$tdrange -JX  -Cbaz.cpt -m -O -K >>$psfile
+
+awk '{print $3,$1,$3%180,$4 }' ${rootout}-good.xy |  psxy -R -JX -Ey/+1p -Sc0.3 -Cbaz.cpt   -O -K  >>$psfile
+awk '{print $3,$1,$3%180,$4 }' ${rootout}-fair.xy |  psxy  -R -JX -Ey/+0.5p -Sc0.2 -Cbaz.cpt   -O -K  >>$psfile 
+awk '{print $3,$1,$3%180,$4 }' ${rootout}-poor.xy    |  psxy  -R -Ey0.1/+0.25p -JX -Sc0.15 -Cbaz.cpt   -O -K  >>$psfile 
+#awk '{print $3,$1,$3%180 }' ${rootout}-null.xy    |  psxy  -R -JX -S+0.2 -W1p -Cbaz.cpt   -O -K  >>$psfile
+awk '{print $3,0.05,$3%180 }' ${rootout}-null.xy    |  psxy  -R -JX -S+0.2 -W1p,150/150/150    -O -K  >>$psfile
+awk '{print $3,$1,$3%180 }' ${rootout}-nearnull.xy    |  psxy  -R -JX -SD0.15  -Cbaz.cpt   -O -K  >>$psfile 
+
+
+psxy < /dev/null -Jx1 -R -O >>$psfile
+
+

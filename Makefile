@@ -15,6 +15,7 @@ BIN=$(HOME)/bin/$(ARCH)
 #BIN = .
 
 EXEC = multisplit split_cor error_stack
+SCRIPTS = scripts/show-overview-SKS.gmt
 
 .PHONY:  install clean
 default: $(EXEC)
@@ -36,5 +37,8 @@ multisplit.o: multisplit.h
 clean:
 	rm *.o $(EXEC)
 	
-install: $(EXEC)
+install: $(EXEC) $(SCRIPTS)
 	install $(EXEC) $(BIN)
+	install $(SCRIPTS) $(BIN)
+    
+ 	
