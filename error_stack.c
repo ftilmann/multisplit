@@ -152,7 +152,7 @@ int main(int argc, char **argv)
   params *par=(params *) malloc(sizeof(params));
   FILE *hdr_file, *bin_file;
   FILE *output;
-  int i,j,k;
+  int i,j,k,l;
   /* Properties of each file */
   float split_par;
   char methodstring[128],label[MAXDIM][128];
@@ -171,6 +171,7 @@ int main(int argc, char **argv)
   int imin[MAXFILES][MAXDIM],imint[MAXDIM],imcmc[MAXDIM],ibootstrap[MAXDIM];
   long imin_1d,imint_1d,tot_length;
   float dof[MAXFILES],postconf[MAXFILES];
+  int conflevel[MAXFILES];
   float tot_dof,valmin[MAXFILES];
   float tot_weight;
   long *imin1d_bootstrap;
@@ -505,7 +506,7 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     // output bootstrap samples
 
     output=open_for_write(par->root,"_bootstrap.x");
-    fprintf(output,"#");
+    fprintf(output,"#"); 
     for (j=0;j<rdim;j++) 
       fprintf(output,"%s ",rlabel[j]);
     fprintf(output,"\n");
@@ -555,6 +556,13 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     x=MIN(1,(double)(dof[k]/(dof[k]+split_par*x))); /* for exact co-incidence round-off can lead to x values slightly larger than 1, hence have to use MIN */
     VRB(printf("X=%f\n",x));
     postconf[k]=1-betai((double)dof[k]/2.,(double)split_par/2,x);
+
+    for (l=0;l<9;l++) {
+       if (postconf[k]<=conf[l])
+           break;
+    }
+    conflevel[k]=l;
+
     printf("Confidence value for %s : %f\n",par->fnames[k],postconf[k]);
 /*     fclose(bin_file); */
   }
@@ -581,16 +589,22 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     fprintf(output,"set best1=%f\n",best[1]);
     fprintf(output,"set label0=\"%s\"\n",rlabel[0]);
     fprintf(output,"set label1=\"%s\"\n",rlabel[1]);
-    fprintf(output,"cat > /tmp/$root.description <<EOF\n");
+    fprintf(output,"cat > $root.description <<EOF\n");
     fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
     fprintf(output,"%s %s stack of %d files.\n\n",rmethodstring,(par->weight ? "weighted" : "unweighted" ),par->nfiles);
     fprintf(output,"Energy Minimum %f (normalised: %f) DOF %f\n\n",emin,emin/tot_weight,tot_dof);
     fprintf(output," %s %3.0f \\261 %3.0f %s %4.2f \\261 %4.2f RejectNull %s\n",
 	    rlabel[0],best[0],err[0], rlabel[1],best[1],err[1],rejectstring);
     fprintf(output,"EOF\n\n");
-    fprintf(output,"cat > /tmp/${root}_allsplit.xy <<EOF\n");
+    fprintf(output,"cat > /tmp/${root}_legend.txt <<EOF\n");
+    fprintf(output,"-0.2 -2   10 0 0 LM Global minimum excluded at confidence:\n"); 
+    for(l=0;l<7;l++) {
+	    fprintf(output,"%5.2f -2.5 10 0 0 LM <%.*f\n",0+l*2.5,(l>=3?l-2:0),100*conf[l]);
+    }
+    fprintf(output,"EOF\n\n");
+    fprintf(output,"cat > ${root}_allsplit.xy <<EOF\n");
     for (k=0;k<par->nfiles;k++) 
-      fprintf(output,"%f %f\n",min[1]+imin[k][1]*step[1],min[0]+imin[k][0]*step[0]);
+      fprintf(output,"%f %f %d\n",min[1]+imin[k][1]*step[1],min[0]+imin[k][0]*step[0],conflevel[k]);
     fprintf(output,"EOF\n\n");
     fprintf(output,"\
 ### Everything below this line is independent of the particular event used\n\
@@ -601,18 +615,44 @@ set psfile=${root}.ps\n\
 gmtdefaults -D >.gmtdefaults\n\
 gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg\n\
 \n\
+\n\
+# color scheme dark green - light green - orange - orangered - red - dark red\n\
+# schemecolor.com red orange and green scheme\n\
+cat > /tmp/${root}.cpt <<EOF\n\
+-0.5  0 107 61  0.5   0 107 61\n\
+0.5   6 156 86  1.5   6 156 86\n\
+1.5 255 152 14  2.5 255 152 14\n\
+2.5 255 104 30  3.5 255 104 30\n\
+3.5 211  33 44  4.5 211  33 44\n\
+F   110  20 30   \n\
+B   110  110 110   \n\
+EOF\n\
+\n\
 # 3cm Descriptive text\n\
-pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile </tmp/${root}.description\n\
+pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
  \n\
 # 8 cm Error surface\n\
 grdcontour -X2 -Y20.5 ${root}.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"$label1\":/20:\"$label0\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n\
-psxy -R -JX -Sx0.3 -W2p/200/100/100  -O -K  >>$psfile <<EOF\n\
+psxy -R -JX -Sx0.5 -W2p/100/100/100  -O -K  >>$psfile <<EOF\n\
 $best1 $best0\n\
 EOF\n\
-psxy < /tmp/${root}_allsplit.xy -R -JX -Sx0.2 -W1p  -O -K  >>$psfile \n\
+psxy < ${root}_allsplit.xy -C/tmp/${root}.cpt -R -JX -S+0.2 -W1p  -O -K  >>$psfile \n\
+\n\
+\n\
+# Legend\n\
+psxy  -C/tmp/$root.cpt -R0/17/0/6.5 -Jx1   -S+0.2 -W1p -N  -O -K  >>$psfile  <<EOF\n\
+  0 -2.5 0\n\
+2.5 -2.5 1\n\
+  5 -2.5 2\n\
+7.5 -2.5 3\n\
+ 10 -2.5 4\n\
+12.5 -2.5 5\n\
+ 15 -2.5 6\n\
+EOF\n\
+pstext -R0/17/0/6.5 -Jx1 -N -D0.2/0 -O -K >>$psfile  </tmp/${root}_legend.txt\n\
 \n\
 psxy < /dev/null -Jx1 -R -O >>$psfile\n\
-\\rm /tmp/${root}_allsplit.xy /tmp/${root}.description\n\
+\\rm /tmp/${root}.cpt /tmp/${root}_legend.txt\n\
 ");
     fclose(output);
     sprintf(cmdstring,"csh %s.gmt",par->root);
