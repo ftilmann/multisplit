@@ -444,7 +444,7 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
   /* compute confidence levels (multipliers of minimum energy) */
   data_dof=par->dof_s * (len * delta - MAX(par->window.taper,0.0));
   dof=data_dof-mod_par-split_par;
-  VRB(printf("data_dof %f mod_par %ld split_par %ld dof %f\n",data_dof,mod_par,split_par,dof));
+  VRB(printf("data_dof %f len*delta %f taper %f mod_par %ld split_par %ld dof %f\n",data_dof,len*delta,par->window.taper,mod_par,split_par,dof));
   if (dof<2) {
     sprintf(warn_str,"Degrees of freedom less than 2 (DOF=%f). Set to 2 but error estimates likely to be meaningless.",dof);
     warn_msg(warn_str);
@@ -462,7 +462,16 @@ root_err.cont:   Contour file with 68%,95.2%,99%, 99.9%,99.99% and 99.999% confi
 
   /* check error bounds and likelyhood level of null splitting */
   for(i=0;i<9;i++) {
-    contour[i]=1+split_par*invfisher((double)split_par,dof,conf[i])/dof;
+    double invfish=invfisher((double)split_par,dof,conf[i]);
+    if (invfish>=0.0) {
+      contour[i]=1+split_par*invfish/dof; 
+    } else {
+      /* if calculation fails choose some defaults that don't make sense but will not crash */
+      if (i>0) 
+	contour[i]=contour[i-1];
+      else
+	contour[i]=1;
+    }
     VRB(printf("i: %ld confidence %f contour %f\n",i,conf[i],contour[i]));
     if (F_EQ(hsplit->timemin,0.0) && contour[i]*emin<gsl_matrix_get(m_res_energy,0,0))
       null=conf[i];

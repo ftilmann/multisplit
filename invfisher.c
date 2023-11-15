@@ -30,7 +30,8 @@ double invfisher(double nu1,double nu2,double conf) {
   fmid=(1.0-betai(nu2/2.0,nu1/2.0,x2))-conf; 
   if (f*fmid >= 0) {
     fprintf(stderr,"ERROR invfisher: root must be bracketed");
-    exit(10);
+    return(-1);
+    /* exit(10); */
   }
   if (f < 0) {
     rtbis=x1;
