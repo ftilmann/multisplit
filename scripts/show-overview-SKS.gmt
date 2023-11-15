@@ -45,7 +45,7 @@ awk 'FNR==2 && $18==1 { print $8,$6,$11,$9,$7}' *${sta}_split.txt > ${rootout}-n
 awk 'FNR==2 && $18==0 { if ($10+0<=95.0)  print $8,$6,$11,$9,$7}' *${sta}_split.txt > ${rootout}-nearnull.xy 
 
 # 3cm Descriptive text
-pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile < ${rootin}.description
+pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -N -K > $psfile < ${rootin}.description
  
 # 8 cm Error surface
 #grdcontour -X2 -Y20.5 ${root}.grd -C${root}.cont -R$grdrange -JX16/6.5 -B0.5:"$label1":/20:"$label0":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile

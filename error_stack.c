@@ -590,7 +590,8 @@ to underflow. The effective number of degrees of freedom for conf. level calcula
     fprintf(output,"set label0=\"%s\"\n",rlabel[0]);
     fprintf(output,"set label1=\"%s\"\n",rlabel[1]);
     fprintf(output,"cat > $root.description <<EOF\n");
-    fprintf(output,"> 10 29 14 0 0 CT 0.564 20  c\n");
+    fprintf(output,"> 10 29.5 12 0 0 CT 0.564 20  c\n");
+    fprintf(output,"%s\n\n",par->root);
     fprintf(output,"%s %s stack of %d files.\n\n",rmethodstring,(par->weight ? "weighted" : "unweighted" ),par->nfiles);
     fprintf(output,"Energy Minimum %f (normalised: %f) DOF %f\n\n",emin,emin/tot_weight,tot_dof);
     fprintf(output," %s %3.0f \\261 %3.0f %s %4.2f \\261 %4.2f RejectNull %s\n",
@@ -629,7 +630,7 @@ B   110  110 110   \n\
 EOF\n\
 \n\
 # 3cm Descriptive text\n\
-pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n\
+pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -N -K > $psfile <${root}.description\n\
  \n\
 # 8 cm Error surface\n\
 grdcontour -X2 -Y20.5 ${root}.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"$label1\":/20:\"$label0\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n\
