@@ -956,8 +956,14 @@ pstext -M -X0 -Y0 -R0/20/0/29 -Jx1 -K > $psfile <${root}.description\n");
     fprintf(output,"\
 \n\
 # 8 cm Error surface\n\
-# For GMT6 need option -F1+f1p instead.\n\
-grdcontour -X2 -Y20.5 ${root}_err.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1  -Wa1.5p -Wc0.5p >>$psfile\n\
+# For GMT6 need option -A1+f1p instead.\n");
+    if (par->make_grd == MAKE_GMT5)
+      fprintf(output,"\
+grdcontour -X2 -Y20.5 ${root}_err.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A1+f1p -Wa1.5p -Wc0.5p >>$psfile\n");
+    else
+      fprintf(output,"\
+grdcontour -X2 -Y20.5 ${root}_err.grd -C${root}.cont -R$grdrange -JX17/6.5 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1  -Wa1.5p -Wc0.5p >>$psfile\n");
+    fprintf(output,"\
 psxy -R -JX -W1p,200/200/200,. -O -K  >>$psfile <<EOF\n\
 # Mark backazimuth\n\
 0 $baz\n\
@@ -1203,9 +1209,15 @@ gmtdefaults -D >.gmtdefaults4\n\
 gmtset PAGE_ORIENTATION portrait MEASURE_UNIT cm WANT_EURO_FONT TRUE LABEL_FONT_SIZE 12 ANOT_FONT_SIZE 10 PAPER_MEDIA a4 D_FORMAT %%lg LABEL_OFFSET 0.05c ANNOT_OFFSET_PRIMARY 0.15c\n\
 # 3cm Descriptive text\n\
 pstext -m -X0 -Y0 -R0/20/0/30 -Jx1 -K > $psfile <${root}.description\n\
-\n\
 # 8 cm Error surface\n\
-grdcontour -X2 -Y22 ${root}_err.grd -C${root}.cont -R$grdrange -JX9.1/5.8 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n\
+\n");
+    if (par->make_grd == MAKE_GMT5)
+      fprintf(output,"\
+grdcontour -X2 -Y22 ${root}_err.grd -C${root}.cont -R$grdrange -JX9.1/5.8 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A1+1f1p -G1000 -Wa1.5p -Wc0.5p >>$psfile\n");
+    else
+      fprintf(output,"\
+grdcontour -X2 -Y22 ${root}_err.grd -C${root}.cont -R$grdrange -JX9.1/5.8 -B0.5:\"Splitting Delay (s)\":/20:\"Fast direction\":WSen -O -K -A-1f1 -G1000 -Wa1.5p -Wc0.5p >>$psfile\n");
+fprintf(output,"\
 psxy -R -JX -S+0.3 -W3p,150/150/150  -O -K  >>$psfile <<EOF\n\
 $besttime $bestfast\n\
 EOF\n\
@@ -2291,7 +2303,7 @@ void parse(int argc, char **argv, ms_params *par) {
       par->make_grd=MAKE_GMT;
       // fprintf(stderr,"DEBUG: make_gmt4\n");
     }
-    else if(!strcasecmp(argv[iarg],"-gmt5") ) {
+    else if(!strcasecmp(argv[iarg],"-gmt5") || !strcasecmp(argv[iarg],"-gmt6") ) {
       par->make_grd=MAKE_GMT5;
       // fprintf(stderr,"DEBUG: make_gmt5\n");
     }
@@ -2404,7 +2416,7 @@ Optional modifiers\n\
 -grd                     Convert 2-parameter error surface binary files to GMT grid files\n\
                                         \n\
 -gmt                     Create and execute GMT script for display - write out time series files (GMT4)\n\
--gmt5                     Create and execute GMT script for display - write out time series files (GMT5)\n\
+-gmt6, --gmt5            Create and execute GMT script for display - write out time series files (GMT6)\n\
 \n\
 -name root               Set root of output file names\n\
                          (Default: derive name from first input file root)\n\
